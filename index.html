@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>猫猫对战 ✨ Cat Clash Claws</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Ma+Shan+Zheng&family=Noto+Sans+SC:wght@400;700&family=Fredoka+One&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- 开始界面 -->
+        <div id="menu-screen" class="screen active">
+            <div class="menu-bg">
+                <div class="floating-bubbles"></div>
+                <div class="falling-petals-container"></div>
+                <div class="stars"></div>
+            </div>
+            <div class="menu-content">
+                <h1 class="game-title">
+                    <span class="title-decoration">✦</span>
+                    猫猫对战
+                    <span class="title-decoration">✦</span>
+                </h1>
+                <p class="game-subtitle">Cat Clash Claws</p>
+                
+                <div class="mode-section">
+                    <h3 class="mode-title">🎮 游戏模式</h3>
+                    <div class="mode-buttons">
+                        <button class="mode-btn ai-mode" data-mode="ai">
+                            🤖 人机对战
+                        </button>
+                        <button class="mode-btn vs-mode" data-mode="vs">
+                            🐱🐱 双人对战
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="difficulty-section">
+                    <h3 class="difficulty-title">🌸 选择难度 🌸</h3>
+                    <div class="difficulty-buttons">
+                        <button class="difficulty-btn easy" data-difficulty="easy">
+                            🐱 萌新
+                        </button>
+                        <button class="difficulty-btn medium" data-difficulty="medium">
+                            🐱🐱 挑战
+                        </button>
+                        <button class="difficulty-btn hard" data-difficulty="hard">
+                            🐱🐱🐱 大师
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="style-section">
+                    <h3 class="style-title">🎨 角色形象</h3>
+                    <div class="style-buttons">
+                        <button class="style-btn cartoon" data-style="cartoon">
+                            ✏️ 动画形象
+                        </button>
+                        <button class="style-btn photo" data-style="photo">
+                            📷 真实照片
+                        </button>
+                    </div>
+                </div>
+
+                <div class="touch-mode-section">
+                    <h3 class="touch-mode-title">📱 触屏模式</h3>
+                    <div class="touch-mode-buttons">
+                        <button class="touch-mode-btn auto" data-touch="auto">
+                            🔄 自动检测
+                        </button>
+                        <button class="touch-mode-btn enabled" data-touch="enabled">
+                            ✅ 强制开启
+                        </button>
+                        <button class="touch-mode-btn disabled" data-touch="disabled">
+                            ❌ 关闭
+                        </button>
+                    </div>
+                </div>
+                
+                <div class="cat-preview">
+                    <div class="cat-card kuro">
+                        <div class="cat-avatar">
+                            <svg viewBox="0 0 100 100" class="cat-svg black-cat">
+                                <ellipse cx="50" cy="55" rx="30" ry="25" fill="#2C2C2C"/>
+                                <ellipse cx="50" cy="35" rx="22" ry="20" fill="#2C2C2C"/>
+                                <polygon points="35,20 30,5 42,15" fill="#2C2C2C"/>
+                                <polygon points="65,20 70,5 58,15" fill="#2C2C2C"/>
+                                <polygon points="33,6 30,2 37,5" fill="#4A3A3A"/>
+                                <polygon points="67,6 70,2 63,5" fill="#4A3A3A"/>
+                                <ellipse cx="40" cy="32" rx="7" ry="9" fill="#FFFFFF"/>
+                                <ellipse cx="60" cy="32" rx="7" ry="9" fill="#FFFFFF"/>
+                                <ellipse cx="42" cy="33" rx="4" ry="6" fill="#FFD700"/>
+                                <ellipse cx="62" cy="33" rx="4" ry="6" fill="#FFD700"/>
+                                <ellipse cx="43" cy="32" rx="2" ry="2.5" fill="#000000"/>
+                                <ellipse cx="63" cy="32" rx="2" ry="2.5" fill="#000000"/>
+                                <ellipse cx="50" cy="42" rx="5" ry="3" fill="#FFB6C1"/>
+                                <path d="M 45 46 Q 50 50 55 46" stroke="#FFB6C1" stroke-width="1.5" fill="none"/>
+                            </svg>
+                        </div>
+                        <div class="cat-info">
+                            <h3>黑茶</h3>
+                            <p>黑猫 · 男孩 · 5岁<br>你控制的主角</p>
+                        </div>
+                    </div>
+                    <div class="vs-badge">VS</div>
+                    <div class="cat-card shiro">
+                        <div class="cat-avatar">
+                            <svg viewBox="0 0 100 100" class="cat-svg white-cat">
+                                <ellipse cx="50" cy="55" rx="30" ry="25" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+                                <ellipse cx="50" cy="35" rx="22" ry="20" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+                                <polygon points="35,20 30,5 42,15" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+                                <polygon points="65,20 70,5 58,15" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+                                <polygon points="33,6 30,2 37,5" fill="#FFB6C1"/>
+                                <polygon points="67,6 70,2 63,5" fill="#FFB6C1"/>
+                                <ellipse cx="40" cy="32" rx="7" ry="9" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+                                <ellipse cx="60" cy="32" rx="7" ry="9" fill="#FFFFFF" stroke="#E8E8E8" stroke-width="1"/>
+                                <ellipse cx="42" cy="33" rx="4" ry="6" fill="#F5DEB3"/>
+                                <ellipse cx="62" cy="33" rx="4" ry="6" fill="#F5DEB3"/>
+                                <ellipse cx="43" cy="32" rx="2" ry="2.5" fill="#000000"/>
+                                <ellipse cx="63" cy="32" rx="2" ry="2.5" fill="#000000"/>
+                                <ellipse cx="50" cy="42" rx="5" ry="3" fill="#FFB6C1"/>
+                                <path d="M 45 46 Q 50 50 55 46" stroke="#FFB6C1" stroke-width="1.5" fill="none"/>
+                            </svg>
+                        </div>
+                        <div class="cat-info">
+                            <h3>茉莉</h3>
+                            <p>白猫 · 女孩 · 2岁半<br>AI对战对手</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <button class="btn-start" onclick="game.start()">
+                    <span class="btn-text">开始战斗</span>
+                    <span class="btn-sparkle">✨</span>
+                </button>
+
+                <button class="btn-mute" id="btn-mute" onclick="toggleMute()">
+                    <span id="mute-icon">🔊</span>
+                    <span id="mute-text">开启音效</span>
+                </button>
+                
+                <div class="controls-hint">
+                    <div class="hint-section">
+                        <h4>🖤 黑茶操作</h4>
+                        <p>W A S D 移动 | J 攻击 | K 防御 | L 技能</p>
+                    </div>
+                    <div class="hint-section shiro-hint">
+                        <h4>🤍 茉莉操作</h4>
+                        <p>↑ ↓ ← → 移动 | 小键盘1 攻击 | 小键盘2 防御 | 小键盘3 技能</p>
+                    </div>
+                </div>
+                
+                <div class="touch-hint">
+                    <p>📱 触屏设备：点击底部按钮进行操作</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 游戏界面 -->
+        <div id="battle-screen" class="screen">
+            <div class="battle-bg">
+                <canvas id="game-canvas"></canvas>
+                <div class="battle-overlay"></div>
+            </div>
+            
+            <div class="difficulty-badge" id="difficulty-badge">🌸 挑战模式</div>
+            
+            <!-- 顶部UI -->
+            <div class="battle-ui top-ui">
+                <div class="player-stats kuro-stats">
+                    <div class="player-name">
+                        <span class="cat-icon">🖤</span>
+                        <span>黑茶</span>
+                    </div>
+                    <div class="hp-bar-container">
+                        <div class="hp-bar">
+                            <div class="hp-fill" id="kuro-hp"></div>
+                            <div class="hp-text" id="kuro-hp-text">100/100</div>
+                        </div>
+                    </div>
+                    <div class="energy-bar-container">
+                        <div class="energy-bar">
+                            <div class="energy-fill" id="kuro-energy"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="player-stats shiro-stats">
+                    <div class="player-name">
+                        <span>茉莉</span>
+                        <span class="cat-icon">🤍</span>
+                        <span class="ai-indicator" id="shiro-indicator">AI</span>
+                    </div>
+                    <div class="hp-bar-container">
+                        <div class="hp-bar">
+                            <div class="hp-fill" id="shiro-hp"></div>
+                            <div class="hp-text" id="shiro-hp-text">100/100</div>
+                        </div>
+                    </div>
+                    <div class="energy-bar-container">
+                        <div class="energy-bar">
+                            <div class="energy-fill" id="shiro-energy"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 中间信息 -->
+            <div class="battle-info">
+                <div class="turn-indicator">第 <span id="turn-count">1</span> 回合</div>
+                <div class="action-hint" id="action-hint">准备好了吗？</div>
+            </div>
+            
+            <!-- 底部控制提示 -->
+            <div class="battle-ui bottom-ui">
+                <!-- 单人模式触屏控制按钮 -->
+                <div class="touch-controls single-player" id="single-player-controls">
+                    <div class="touch-player-tabs">
+                        <button class="touch-tab kuro-tab active" data-player="kuro">🖤 黑茶</button>
+                        <button class="touch-tab shiro-tab" data-player="shiro">🤍 茉莉</button>
+                    </div>
+                    <div class="touch-buttons">
+                        <div class="touch-direction">
+                            <button class="touch-btn move-up">⬆️</button>
+                            <div class="touch-horizontal">
+                                <button class="touch-btn move-left">⬅️</button>
+                                <button class="touch-btn center-btn">🎮</button>
+                                <button class="touch-btn move-right">➡️</button>
+                            </div>
+                            <button class="touch-btn move-down">⬇️</button>
+                        </div>
+                        <div class="touch-actions">
+                            <button class="touch-btn attack-btn">⚔️ 攻击</button>
+                            <button class="touch-btn defend-btn">🛡️ 防御</button>
+                            <button class="touch-btn skill-btn">✨ 技能</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 双人模式触屏控制按钮 -->
+                <div class="touch-controls two-player" id="two-player-controls">
+                    <div class="player1-controls">
+                        <div class="player-label">🖤 黑茶 (玩家1)</div>
+                        <div class="touch-buttons">
+                            <div class="touch-direction">
+                                <button class="touch-btn move-up-p1">⬆️</button>
+                                <div class="touch-horizontal">
+                                    <button class="touch-btn move-left-p1">⬅️</button>
+                                    <button class="touch-btn center-btn-p1">🎮</button>
+                                    <button class="touch-btn move-right-p1">➡️</button>
+                                </div>
+                                <button class="touch-btn move-down-p1">⬇️</button>
+                            </div>
+                            <div class="touch-actions">
+                                <button class="touch-btn attack-btn-p1">⚔️ 攻击</button>
+                                <button class="touch-btn defend-btn-p1">🛡️ 防御</button>
+                                <button class="touch-btn skill-btn-p1">✨ 技能</button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="player2-controls">
+                        <div class="player-label">🤍 茉莉 (玩家2)</div>
+                        <div class="touch-buttons">
+                            <div class="touch-direction">
+                                <button class="touch-btn move-up-p2">⬆️</button>
+                                <div class="touch-horizontal">
+                                    <button class="touch-btn move-left-p2">⬅️</button>
+                                    <button class="touch-btn center-btn-p2">🎮</button>
+                                    <button class="touch-btn move-right-p2">➡️</button>
+                                </div>
+                                <button class="touch-btn move-down-p2">⬇️</button>
+                            </div>
+                            <div class="touch-actions">
+                                <button class="touch-btn attack-btn-p2">⚔️ 攻击</button>
+                                <button class="touch-btn defend-btn-p2">🛡️ 防御</button>
+                                <button class="touch-btn skill-btn-p2">✨ 技能</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 伤害数字容器 -->
+            <div id="damage-numbers"></div>
+            
+            <!-- 消息提示 -->
+            <div class="battle-message" id="battle-message"></div>
+        </div>
+
+        <!-- 结果界面 -->
+        <div id="result-screen" class="screen">
+            <div class="result-bg">
+                <div class="confetti-container" id="confetti"></div>
+            </div>
+            <div class="result-content">
+                <div class="result-badge" id="result-badge">🏆</div>
+                <h2 class="result-title" id="result-title">胜利者</h2>
+                <div class="winner-display" id="winner-display">
+                    <div class="winner-cat" id="winner-cat"></div>
+                    <div class="winner-info" id="winner-info"></div>
+                </div>
+                <p class="result-subtitle" id="result-subtitle">恭喜获得胜利！</p>
+                <button class="btn-restart" onclick="game.restart()">
+                    <span>再来一局</span>
+                </button>
+                <button class="btn-menu" onclick="game.showMenu()">
+                    <span>返回菜单</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/audio.js"></script>
+    <script src="js/utils.js"></script>
+    <script src="js/cat.js"></script>
+    <script src="js/battle.js"></script>
+    <script src="js/ui.js"></script>
+    <script src="js/ai.js"></script>
+    <script src="js/game.js"></script>
+
+    <script>
+        function toggleMute() {
+            const isMuted = audioManager.toggleMute();
+            const icon = document.getElementById('mute-icon');
+            const text = document.getElementById('mute-text');
+
+            if (isMuted) {
+                icon.textContent = '🔇';
+                text.textContent = '关闭音效';
+            } else {
+                icon.textContent = '🔊';
+                text.textContent = '开启音效';
+                audioManager.init();
+            }
+        }
+    </script>
+</body>
+</html>
