@@ -182,7 +182,7 @@ class Cat {
         if (this.isDead) return;
 
         // 血量低于70%时才会说话
-        if (this.hp / this.maxHp > 0.7) {
+        if (this.hp / this.maxHp >= 0.7) {
             return;
         }
 

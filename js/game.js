@@ -261,9 +261,6 @@ class CatClashGame {
             if (btn) {
                 const setButtonState = (active) => {
                     this.touchControls[this.currentTouchPlayer][moveButtons[id].dir] = active;
-                    if (active) {
-                        this.moveCat(this.currentTouchPlayer, moveButtons[id].dx, moveButtons[id].dy);
-                    }
                 };
                 
                 btn.addEventListener('touchstart', (e) => {
@@ -317,9 +314,6 @@ class CatClashGame {
             if (btn) {
                 const setButtonState = (active) => {
                     this.touchControls.kuro[p1MoveButtons[id].dir] = active;
-                    if (active) {
-                        this.moveCat('kuro', p1MoveButtons[id].dx, p1MoveButtons[id].dy);
-                    }
                 };
                 
                 btn.addEventListener('touchstart', (e) => {
@@ -352,9 +346,6 @@ class CatClashGame {
             if (btn) {
                 const setButtonState = (active) => {
                     this.touchControls.shiro[p2MoveButtons[id].dir] = active;
-                    if (active) {
-                        this.moveCat('shiro', p2MoveButtons[id].dx, p2MoveButtons[id].dy);
-                    }
                 };
                 
                 btn.addEventListener('touchstart', (e) => {
