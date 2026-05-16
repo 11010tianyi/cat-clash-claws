@@ -394,6 +394,32 @@ class UIManager {
         `;
         document.head.appendChild(style);
     }
+
+    showDialog(cat, text, duration = 3000) {
+        if (!this.elements.damageNumbers) return;
+
+        const dialogEl = document.createElement('div');
+        dialogEl.className = 'cat-dialog';
+        dialogEl.textContent = text;
+
+        const catX = cat.x + cat.width / 2;
+        const catY = cat.y - 40;
+
+        dialogEl.style.left = `${catX}px`;
+        dialogEl.style.top = `${catY}px`;
+        
+        if (cat.id === 'kuro') {
+            dialogEl.style.marginLeft = '-100px';
+        } else {
+            dialogEl.style.marginLeft = '-100px';
+        }
+
+        this.elements.damageNumbers.appendChild(dialogEl);
+
+        setTimeout(() => {
+            dialogEl.remove();
+        }, duration);
+    }
 }
 
 window.UIManager = UIManager;

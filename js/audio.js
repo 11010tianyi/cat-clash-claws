@@ -154,6 +154,38 @@ class AudioManager {
         }, 100);
     }
 
+    playCanSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        for (let i = 0; i < 4; i++) {
+            setTimeout(() => {
+                const freq = 150 + i * 30;
+                this.playNote(freq, 0.08, 'square', 0.15);
+                this.playNote(freq * 1.2, 0.06, 'sine', 0.1);
+            }, i * 40);
+        }
+        setTimeout(() => {
+            for (let i = 0; i < 3; i++) {
+                setTimeout(() => {
+                    const freq = 400 + i * 100;
+                    this.playNote(freq, 0.1, 'sine', 0.1);
+                }, i * 60);
+            }
+        }, 160);
+    }
+
+    playFreezeDriedSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        for (let i = 0; i < 5; i++) {
+            setTimeout(() => {
+                const freq = 800 + i * 200;
+                this.playNote(freq, 0.05, 'square', 0.12);
+                this.playNote(freq * 1.3, 0.04, 'triangle', 0.08);
+            }, i * 25);
+        }
+    }
+
     playProjectileSound() {
         if (!this.isInitialized || this.isMuted) return;
 

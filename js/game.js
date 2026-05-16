@@ -49,6 +49,16 @@ class CatClashGame {
             kuro: { up: false, down: false, left: false, right: false },
             shiro: { up: false, down: false, left: false, right: false }
         };
+
+        // 连续按键系统
+        this.consecutiveKeys = {
+            kuro: { lastDirection: null, pressCount: 0, lastPressTime: 0, lastRushTime: 0 },
+            shiro: { lastDirection: null, pressCount: 0, lastPressTime: 0, lastRushTime: 0 }
+        };
+
+        // 冲撞状态
+        this.rushingCats = {};
+        this.rushTrails = [];
     }
 
     init() {
@@ -249,6 +259,9 @@ class CatClashGame {
             if (btn) {
                 const setButtonState = (active) => {
                     this.touchControls[this.currentTouchPlayer][moveButtons[id].dir] = active;
+                    if (active) {
+                        this.moveCat(this.currentTouchPlayer, moveButtons[id].dx, moveButtons[id].dy);
+                    }
                 };
                 
                 btn.addEventListener('touchstart', (e) => {
@@ -302,6 +315,9 @@ class CatClashGame {
             if (btn) {
                 const setButtonState = (active) => {
                     this.touchControls.kuro[p1MoveButtons[id].dir] = active;
+                    if (active) {
+                        this.moveCat('kuro', p1MoveButtons[id].dx, p1MoveButtons[id].dy);
+                    }
                 };
                 
                 btn.addEventListener('touchstart', (e) => {
@@ -334,6 +350,9 @@ class CatClashGame {
             if (btn) {
                 const setButtonState = (active) => {
                     this.touchControls.shiro[p2MoveButtons[id].dir] = active;
+                    if (active) {
+                        this.moveCat('shiro', p2MoveButtons[id].dx, p2MoveButtons[id].dy);
+                    }
                 };
                 
                 btn.addEventListener('touchstart', (e) => {
@@ -587,10 +606,62 @@ class CatClashGame {
         const cat = this.cats.find(c => c.id === catId);
         if (!cat || cat.isDead) return;
 
-        const moveSpeed = 5;
-        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
-            cat.move(dx, dy);
+        // 连续按键处理
+        const now = Date.now();
+        const keyState = this.consecutiveKeys[catId];
+        
+        // 确定当前方向
+        let direction = null;
+        if (dx < 0) direction = 'left';
+        else if (dx > 0) direction = 'right';
+        else if (dy < 0) direction = 'up';
+        else if (dy > 0) direction = 'down';
+
+        if (direction) {
+            // 检查是否是快速连按同一个方向
+            const timeSinceLastPress = now - keyState.lastPressTime;
+            if (keyState.lastDirection === direction && timeSinceLastPress < 300) {
+                keyState.pressCount++;
+            } else {
+                keyState.pressCount = 1;
+            }
+            keyState.lastDirection = direction;
+            keyState.lastPressTime = now;
+
+            // 连按2次：快速移动
+            if (keyState.pressCount === 2) {
+                const fastMoveSpeed = 10;
+                cat.targetX += dx * fastMoveSpeed;
+                cat.targetY += dy * fastMoveSpeed;
+                if (dx > 0) cat.direction = 'right';
+                if (dx < 0) cat.direction = 'left';
+                this.createRushTrail(cat);
+            } 
+            // 连按3次：冲撞
+            else if (keyState.pressCount >= 3) {
+                const timeSinceLastRush = now - keyState.lastRushTime;
+                if (timeSinceLastRush >= 60000) { // 60秒冷却
+                    this.startRush(catId, direction);
+                    keyState.pressCount = 0;
+                    keyState.lastRushTime = now;
+                } else {
+                    // 冷却中，播放没力气了提示
+                    audioManager.playFoodPickupSound(); // 使用现有音效
+                    this.uiManager.showMessage("没力气了...", 1500);
+                    keyState.pressCount = 0;
+                }
+            } 
+            // 普通移动
+            else {
+                const moveSpeed = 5;
+                cat.targetX += dx * moveSpeed;
+                cat.targetY += dy * moveSpeed;
+                if (dx > 0) cat.direction = 'right';
+                if (dx < 0) cat.direction = 'left';
+            }
         } else {
+            // 没有方向，普通移动
+            const moveSpeed = 5;
             cat.targetX += dx * moveSpeed;
             cat.targetY += dy * moveSpeed;
             if (dx > 0) cat.direction = 'right';
@@ -603,6 +674,117 @@ class CatClashGame {
 
         cat.x = Utils.clamp(cat.x, padding, this.canvas.width - cat.width - padding);
         cat.y = Utils.clamp(cat.y, 180, this.canvas.height - cat.height - 180);
+    }
+
+    createRushTrail(cat) {
+        for (let i = 0; i < 3; i++) {
+            this.rushTrails.push({
+                x: cat.x + cat.width / 2,
+                y: cat.y + cat.height / 2,
+                alpha: 0.6 - i * 0.15,
+                size: 30 - i * 5,
+                color: cat.id === 'kuro' ? 'rgba(100, 50, 150)' : 'rgba(255, 215, 0)',
+                life: 1
+            });
+        }
+    }
+
+    startRush(catId, direction) {
+        const cat = this.cats.find(c => c.id === catId);
+        if (!cat || cat.isDead) return;
+
+        this.rushingCats[catId] = {
+            active: true,
+            direction: direction,
+            startX: cat.x,
+            startY: cat.y,
+            startTime: Date.now(),
+            duration: 500 // 0.5秒
+        };
+
+        cat.isAttacking = true;
+
+        // 计算冲撞终点
+        const padding = 60;
+        let targetX = cat.x;
+        let targetY = cat.y;
+
+        switch (direction) {
+            case 'left':
+                targetX = padding;
+                break;
+            case 'right':
+                targetX = this.canvas.width - cat.width - padding;
+                break;
+            case 'up':
+                targetY = 180;
+                break;
+            case 'down':
+                targetY = this.canvas.height - cat.height - 180;
+                break;
+        }
+
+        cat.targetX = targetX;
+        cat.targetY = targetY;
+    }
+
+    updateRush(deltaTime) {
+        for (const catId in this.rushingCats) {
+            const rush = this.rushingCats[catId];
+            if (!rush.active) continue;
+
+            const cat = this.cats.find(c => c.id === catId);
+            if (!cat) continue;
+
+            const elapsed = Date.now() - rush.startTime;
+            const progress = Math.min(elapsed / rush.duration, 1);
+
+            // 冲撞轨迹
+            if (Math.random() > 0.5) {
+                this.createRushTrail(cat);
+            }
+
+            // 检测碰撞
+            const otherCat = this.cats.find(c => c.id !== catId);
+            if (otherCat && !otherCat.isDead) {
+                const dx = (cat.x + cat.width / 2) - (otherCat.x + otherCat.width / 2);
+                const dy = (cat.y + cat.height / 2) - (otherCat.y + otherCat.height / 2);
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist < 100) {
+                    // 碰撞！把对方撞到边界
+                    const pushDirectionX = dx > 0 ? 1 : -1;
+                    const padding = 60;
+                    const targetX = pushDirectionX > 0 
+                        ? this.canvas.width - otherCat.width - padding 
+                        : padding;
+                    
+                    otherCat.targetX = targetX;
+                    otherCat.x = otherCat.targetX;
+
+                    // 造成伤害
+                    const damage = 6 + Math.floor(Math.random() * 10);
+                    otherCat.takeDamage(damage, cat);
+                    audioManager.playHitSound();
+                    this.uiManager.showDamage(otherCat, damage, false, null);
+                    this.uiManager.updateHP(otherCat);
+                }
+            }
+
+            // 结束冲撞
+            if (progress >= 1) {
+                rush.active = false;
+                cat.isAttacking = false;
+            }
+            this.rushingCats[catId].active = false;
+        }
+
+        // 更新轨迹
+        this.rushTrails = this.rushTrails.filter(trail => {
+            trail.life -= 0.05;
+            trail.alpha = trail.life * 0.6;
+            return trail.life > 0;
+        });
     }
 
     attackCat(catId) {
@@ -694,6 +876,9 @@ class CatClashGame {
 
         this.handleKeyHold();
 
+        this.checkCollision();
+        this.updateRush(deltaTime);
+
         this.updateFood(deltaTime);
         this.checkFoodCollisions();
         this.checkProjectileCollisions();
@@ -733,6 +918,49 @@ class CatClashGame {
             if (this.touchControls.shiro.down) this.moveCat('shiro', 0, 0.12);
             if (this.touchControls.shiro.left) this.moveCat('shiro', -0.12, 0);
             if (this.touchControls.shiro.right) this.moveCat('shiro', 0.12, 0);
+        }
+    }
+
+    checkCollision() {
+        if (this.cats.length < 2) return;
+
+        const cat1 = this.cats[0];
+        const cat2 = this.cats[1];
+
+        if (cat1.isDead || cat2.isDead) return;
+
+        const cat1CenterX = cat1.x + cat1.width / 2;
+        const cat1CenterY = cat1.y + cat1.height / 2;
+        const cat2CenterX = cat2.x + cat2.width / 2;
+        const cat2CenterY = cat2.y + cat2.height / 2;
+
+        const dx = cat2CenterX - cat1CenterX;
+        const dy = cat2CenterY - cat1CenterY;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        const minDistance = cat1.width * 0.7;
+
+        if (distance < minDistance) {
+            const overlap = minDistance - distance;
+            const separationX = dx > 0 ? -overlap / 2 : overlap / 2;
+            const separationY = dy > 0 ? -overlap / 2 : overlap / 2;
+
+            if (distance > 0) {
+                const ratio = overlap / distance;
+                cat1.x -= dx * ratio / 2;
+                cat1.y -= dy * ratio / 2;
+                cat1.targetX = cat1.x;
+                cat1.targetY = cat1.y;
+                
+                cat2.x += dx * ratio / 2;
+                cat2.y += dy * ratio / 2;
+                cat2.targetX = cat2.x;
+                cat2.targetY = cat2.y;
+            } else {
+                cat1.x -= overlap / 2;
+                cat1.targetX = cat1.x;
+                cat2.x += overlap / 2;
+                cat2.targetX = cat2.x;
+            }
         }
     }
 
@@ -873,7 +1101,15 @@ class CatClashGame {
                     }
 
                     this.foodItems.splice(i, 1);
-                    audioManager.playFoodPickupSound();
+
+                    if (food.type.name === '罐头') {
+                        audioManager.playCanSound();
+                    } else if (food.type.name === '鸡肉冻干') {
+                        audioManager.playFreezeDriedSound();
+                    } else {
+                        audioManager.playFoodPickupSound();
+                    }
+
                     this.uiManager.showMessage(`${cat.name} 捡到了 ${food.type.name}！恢复 ${actualHeal} 点生命！`, 1500);
                     break;
                 }
@@ -908,9 +1144,22 @@ class CatClashGame {
         this.renderGround();
         this.renderClouds();
         this.renderPetals();
+        this.renderRushTrails();
         this.renderCats();
         this.renderFood();
         this.renderHeartsEffect();
+    }
+
+    renderRushTrails() {
+        this.rushTrails.forEach(trail => {
+            this.ctx.save();
+            this.ctx.globalAlpha = trail.alpha;
+            this.ctx.fillStyle = trail.color;
+            this.ctx.beginPath();
+            this.ctx.arc(trail.x, trail.y, trail.size, 0, Math.PI * 2);
+            this.ctx.fill();
+            this.ctx.restore();
+        });
     }
 
     renderHeartsEffect() {

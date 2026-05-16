@@ -12,6 +12,13 @@ class Cat {
         this.height = 160;
         this.baseSpeed = 5;
 
+        // 对话系统
+        this.dialogTimer = 0;
+        this.nextDialogTime = 0;
+        this.dialogCooldown = false;
+        this.kuroDialogs = ['喵~', '喵！', '喵呜~', '喵喵！'];
+        this.shiroDialogs = ['你把我打疼了！', '快停下黑茶！', '你个傻猫！', '呜呜呜...', '我生气了！', '等等，先别打...', '你轻点！'];
+
         this.maxHp = config.maxHp;
         this.hp = this.maxHp;
         this.maxEnergy = 100;
@@ -165,6 +172,40 @@ class Cat {
             }
         } else {
             this.skillScale = 1.0;
+        }
+
+        // 对话系统更新
+        this.updateDialog(deltaTime);
+    }
+
+    updateDialog(deltaTime) {
+        if (this.isDead) return;
+
+        // 血量低于70%时才会说话
+        if (this.hp / this.maxHp > 0.7) {
+            return;
+        }
+
+        this.dialogTimer += deltaTime;
+
+        if (!this.dialogCooldown && this.dialogTimer >= this.nextDialogTime) {
+            this.dialogCooldown = true;
+
+            // 随机选择下一次对话时间（5-40秒）
+            this.nextDialogTime = 5000 + Math.random() * 35000;
+            this.dialogTimer = 0;
+
+            // 触发对话，通过回调显示
+            if (window.game && window.game.uiManager) {
+                const dialogs = this.id === 'kuro' ? this.kuroDialogs : this.shiroDialogs;
+                const randomDialog = dialogs[Math.floor(Math.random() * dialogs.length)];
+                window.game.uiManager.showDialog(this, randomDialog);
+            }
+
+            // 对话冷却时间
+            setTimeout(() => {
+                this.dialogCooldown = false;
+            }, 3000);
         }
     }
 
