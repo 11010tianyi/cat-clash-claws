@@ -186,6 +186,35 @@ class AudioManager {
         }
     }
 
+    playKuroDialogSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        const baseFreq = 280;
+        this.playNote(baseFreq, 0.18, 'triangle', 0.4);
+        setTimeout(() => {
+            this.playNote(baseFreq * 0.85, 0.12, 'triangle', 0.35);
+        }, 80);
+        setTimeout(() => {
+            this.playNote(baseFreq * 1.15, 0.15, 'triangle', 0.3);
+        }, 150);
+    }
+
+    playShiroDialogSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        const baseFreq = 480;
+        this.playNote(baseFreq, 0.12, 'sine', 0.35);
+        setTimeout(() => {
+            this.playNote(baseFreq * 1.2, 0.1, 'sine', 0.3);
+        }, 70);
+        setTimeout(() => {
+            this.playNote(baseFreq * 0.9, 0.08, 'sine', 0.25);
+        }, 120);
+        setTimeout(() => {
+            this.playNote(baseFreq * 1.3, 0.06, 'sine', 0.2);
+        }, 170);
+    }
+
     playProjectileSound() {
         if (!this.isInitialized || this.isMuted) return;
 

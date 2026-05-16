@@ -78,6 +78,11 @@ class CatAI {
             }
         }
 
+        if (distance > 280 && Math.random() > 0.4 && energyRatio >= 0.2) {
+            action = 'projectile';
+            priority = 7;
+        }
+
         if (distance > 300 && !aiCat.isAttacking) {
             action = 'approach';
             priority = 4;
@@ -105,8 +110,13 @@ class CatAI {
 
         if (this.difficulty === 'hard' && targetHpRatio < 0.3) {
             if (distance > 200) {
-                action = 'approach';
-                priority = 12;
+                if (Math.random() > 0.5) {
+                    action = 'projectile';
+                    priority = 12;
+                } else {
+                    action = 'approach';
+                    priority = 11;
+                }
             } else if (aiCat.attackCooldown <= 0) {
                 action = 'attack';
                 priority = 12;
@@ -133,6 +143,9 @@ class CatAI {
                     break;
                 case 'skill':
                     this.performSkill(aiCat, target);
+                    break;
+                case 'projectile':
+                    this.performProjectile(aiCat, target);
                     break;
                 case 'approach':
                     this.moveTowardsTarget(aiCat, target);
@@ -162,6 +175,12 @@ class CatAI {
     performSkill(aiCat, target) {
         if (!aiCat.isDead && aiCat.energy >= 30 && aiCat.skillCooldown <= 0) {
             game.skillCat('shiro');
+        }
+    }
+
+    performProjectile(aiCat, target) {
+        if (!aiCat.isDead && aiCat.energy >= 10) {
+            game.fireProjectileCat('shiro');
         }
     }
 

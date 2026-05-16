@@ -23,7 +23,8 @@ class CatClashGame {
                 'KeyD': () => this.moveCat('kuro', 1, 0),
                 'KeyJ': () => this.attackCat('kuro'),
                 'KeyK': () => this.defendCat('kuro'),
-                'KeyL': () => this.skillCat('kuro')
+                'KeyL': () => this.skillCat('kuro'),
+                'KeyU': () => this.fireProjectileCat('kuro')
             },
             shiro: {
                 'ArrowUp': () => this.moveCat('shiro', 0, -1),
@@ -32,7 +33,8 @@ class CatClashGame {
                 'ArrowRight': () => this.moveCat('shiro', 1, 0),
                 'Numpad1': () => this.attackCat('shiro'),
                 'Numpad2': () => this.defendCat('shiro'),
-                'Numpad3': () => this.skillCat('shiro')
+                'Numpad3': () => this.skillCat('shiro'),
+                'Numpad0': () => this.fireProjectileCat('shiro')
             }
         };
         this.backgroundElements = {
@@ -821,6 +823,16 @@ class CatClashGame {
                 duration: 1500
             };
         }
+    }
+
+    fireProjectileCat(catId) {
+        const attacker = this.cats.find(c => c.id === catId);
+        const target = this.cats.find(c => c.id !== catId);
+
+        if (!attacker || !target || attacker.isDead) return;
+
+        audioManager.playProjectileSound();
+        attacker.fireProjectile(target);
     }
 
     skillCat(catId) {

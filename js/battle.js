@@ -25,6 +25,8 @@ class BattleSystem {
     init(cats) {
         this.cats = cats;
         this.turn = 1;
+        this.currentRound = 1;
+        this.roundWins = { kuro: 0, shiro: 0 };
         this.isBattleActive = true;
         this.battleLog = [];
 

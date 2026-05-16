@@ -195,6 +195,15 @@ class Cat {
             this.nextDialogTime = 5000 + Math.random() * 35000;
             this.dialogTimer = 0;
 
+            // 播放对话音效
+            if (window.game && window.audioManager) {
+                if (this.id === 'kuro') {
+                    window.audioManager.playKuroDialogSound();
+                } else {
+                    window.audioManager.playShiroDialogSound();
+                }
+            }
+
             // 触发对话，通过回调显示
             if (window.game && window.game.uiManager) {
                 const dialogs = this.id === 'kuro' ? this.kuroDialogs : this.shiroDialogs;
@@ -289,17 +298,35 @@ class Cat {
         const angle = Math.atan2(targetY - startY, targetX - startX);
         const speed = 8;
 
-        this.projectiles.push({
-            x: startX,
-            y: startY,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            damage: Math.floor(Math.random() * 5) + 1,
-            targetId: target.id,
-            lifetime: 200,
-            color: this.id === 'kuro' ? '#4B0082' : '#FFD700',
-            trail: []
-        });
+        if (this.id === 'kuro') {
+            this.projectiles.push({
+                x: startX,
+                y: startY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                damage: Math.floor(Math.random() * 4) + 3,
+                targetId: target.id,
+                lifetime: 200,
+                type: 'shuriken',
+                rotation: 0,
+                color: '#4B0082',
+                trail: []
+            });
+        } else {
+            this.projectiles.push({
+                x: startX,
+                y: startY,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                damage: Math.floor(Math.random() * 5) + 2,
+                targetId: target.id,
+                lifetime: 200,
+                type: 'star',
+                rotation: 0,
+                color: '#FFD700',
+                trail: []
+            });
+        }
     }
 
     updateProjectiles(deltaTime) {
@@ -307,12 +334,13 @@ class Cat {
             proj.x += proj.vx;
             proj.y += proj.vy;
             proj.lifetime--;
+            proj.rotation += proj.type === 'shuriken' ? 0.3 : 0.2;
 
             proj.trail.push({ x: proj.x, y: proj.y, alpha: 1 });
-            if (proj.trail.length > 10) {
+            if (proj.trail.length > 12) {
                 proj.trail.shift();
             }
-            proj.trail.forEach(t => t.alpha *= 0.9);
+            proj.trail.forEach(t => t.alpha *= 0.92);
 
             return proj.lifetime > 0;
         });
@@ -408,24 +436,31 @@ class Cat {
         this.energy -= 50;
         this.skillScale = 1.0;
 
-        for (let i = 0; i < 20; i++) {
-            setTimeout(() => {
-                this.particles.push(Utils.createParticle(
-                    this.x + this.width / 2 + Utils.randomRange(-40, 40),
-                    this.y + this.height / 2 + Utils.randomRange(-40, 40),
-                    this.id === 'shiro' ? 'heal' : 'sparkle'
-                ));
-            }, i * 30);
-        }
-
-        if (this.id === 'shiro') {
-            for (let i = 0; i < 8; i++) {
+        if (this.id === 'kuro') {
+            for (let i = 0; i < 25; i++) {
+                setTimeout(() => {
+                    for (let j = 0; j < 2; j++) {
+                        this.particles.push({
+                            x: this.x + this.width / 2 + Utils.randomRange(-60, 60),
+                            y: this.y + this.height / 2 + Utils.randomRange(-60, 60),
+                            vx: Utils.randomRange(-3, 3),
+                            vy: Utils.randomRange(-3, 3),
+                            size: Utils.randomRange(8, 15),
+                            life: 1,
+                            color: `rgba(${75 + Math.random() * 50}, 0, ${130 + Math.random() * 50}, 1)`,
+                            type: 'shadow'
+                        });
+                    }
+                }, i * 25);
+            }
+        } else {
+            for (let i = 0; i < 15; i++) {
                 this.hearts.push({
-                    x: this.x + this.width / 2 + Utils.randomRange(-40, 40),
-                    y: this.y - 20,
-                    size: Utils.randomRange(18, 28),
+                    x: this.x + this.width / 2 + Utils.randomRange(-50, 50),
+                    y: this.y - 30 + i * 5,
+                    size: Utils.randomRange(20, 35),
                     alpha: 1,
-                    vy: -1.2,
+                    vy: -1.5 - Math.random() * 0.5,
                     life: 1
                 });
             }
@@ -600,13 +635,22 @@ class Cat {
 
     updateParticles(deltaTime) {
         this.particles = this.particles.filter(p => {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.12;
-            p.life -= p.decay;
-            p.alpha = p.life;
-            p.size *= 0.97;
-            return p.life > 0;
+            if (p.type === 'shadow') {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life -= 0.035;
+                p.alpha = p.life;
+                p.size *= 0.96;
+                return p.life > 0;
+            } else {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.12;
+                p.life -= p.decay;
+                p.alpha = p.life;
+                p.size *= 0.97;
+                return p.life > 0;
+            }
         });
 
         this.trailParticles = this.trailParticles.filter(p => {
@@ -1131,9 +1175,16 @@ class Cat {
         this.particles.forEach(p => {
             ctx.save();
             ctx.globalAlpha = p.alpha;
-            ctx.fillStyle = p.color;
-            ctx.shadowColor = p.color;
-            ctx.shadowBlur = 10;
+            ctx.fillStyle = p.color || p.particleColor;
+            
+            if (p.type === 'shadow') {
+                ctx.shadowColor = p.color;
+                ctx.shadowBlur = 15;
+            } else {
+                ctx.shadowColor = p.color || p.particleColor;
+                ctx.shadowBlur = 10;
+            }
+
             ctx.beginPath();
             ctx.arc(p.x - this.x - this.width / 2, p.y - this.y - this.height / 2, p.size, 0, Math.PI * 2);
             ctx.fill();
@@ -1182,23 +1233,84 @@ class Cat {
         this.projectiles.forEach(proj => {
             proj.trail.forEach((t, i) => {
                 ctx.save();
-                ctx.globalAlpha = t.alpha * 0.5;
+                ctx.globalAlpha = t.alpha * 0.6;
                 ctx.fillStyle = proj.color;
                 ctx.beginPath();
-                ctx.arc(t.x, t.y, 4 - i * 0.3, 0, Math.PI * 2);
+                ctx.arc(t.x, t.y, 5 - i * 0.35, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
             });
 
             ctx.save();
             ctx.translate(proj.x, proj.y);
+            ctx.rotate(proj.rotation);
             ctx.shadowColor = proj.color;
-            ctx.shadowBlur = 15;
-            ctx.fillStyle = proj.color;
-            ctx.font = '20px Arial';
-            ctx.fillText('✨', -10, 7);
+            ctx.shadowBlur = 20;
+
+            if (proj.type === 'shuriken') {
+                this.drawShuriken(ctx);
+            } else {
+                this.drawGoldenStar(ctx);
+            }
+
             ctx.restore();
         });
+    }
+
+    drawShuriken(ctx) {
+        const points = 4;
+        const outerRadius = 14;
+        const innerRadius = 5;
+
+        ctx.beginPath();
+        for (let i = 0; i < points * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / points - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#4B0082';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#1a1a1a';
+        ctx.fill();
+    }
+
+    drawGoldenStar(ctx) {
+        const points = 5;
+        const outerRadius = 12;
+        const innerRadius = 5;
+
+        ctx.beginPath();
+        for (let i = 0; i < points * 2; i++) {
+            const radius = i % 2 === 0 ? outerRadius : innerRadius;
+            const angle = (i * Math.PI) / points - Math.PI / 2;
+            const x = Math.cos(angle) * radius;
+            const y = Math.sin(angle) * radius;
+
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+        ctx.closePath();
+        ctx.fillStyle = '#FFD700';
+        ctx.fill();
+
+        ctx.beginPath();
+        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.fillStyle = '#FFF8DC';
+        ctx.fill();
     }
 
     drawFood(ctx) {
