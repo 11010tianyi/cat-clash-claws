@@ -44,6 +44,11 @@ class CatClashGame {
         this.foodSpawnTimer = 0;
         this.foodSpawnInterval = 5000;
         this.heartsEffect = null;
+        
+        this.touchControls = {
+            kuro: { up: false, down: false, left: false, right: false },
+            shiro: { up: false, down: false, left: false, right: false }
+        };
     }
 
     init() {
@@ -233,22 +238,34 @@ class CatClashGame {
         });
 
         const moveButtons = {
-            'move-up': { dx: 0, dy: -1 },
-            'move-down': { dx: 0, dy: 1 },
-            'move-left': { dx: -1, dy: 0 },
-            'move-right': { dx: 1, dy: 0 }
+            'move-up': { dir: 'up', dx: 0, dy: -1 },
+            'move-down': { dir: 'down', dx: 0, dy: 1 },
+            'move-left': { dir: 'left', dx: -1, dy: 0 },
+            'move-right': { dir: 'right', dx: 1, dy: 0 }
         };
 
         Object.keys(moveButtons).forEach(id => {
             const btn = document.querySelector(`.touch-btn.${id}`);
             if (btn) {
+                const setButtonState = (active) => {
+                    this.touchControls[this.currentTouchPlayer][moveButtons[id].dir] = active;
+                };
+                
                 btn.addEventListener('touchstart', (e) => {
                     e.preventDefault();
-                    this.moveCat(this.currentTouchPlayer, moveButtons[id].dx, moveButtons[id].dy);
+                    setButtonState(true);
                 });
-                btn.addEventListener('mousedown', () => {
-                    this.moveCat(this.currentTouchPlayer, moveButtons[id].dx, moveButtons[id].dy);
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    setButtonState(false);
                 });
+                btn.addEventListener('touchcancel', (e) => {
+                    e.preventDefault();
+                    setButtonState(false);
+                });
+                btn.addEventListener('mousedown', () => setButtonState(true));
+                btn.addEventListener('mouseup', () => setButtonState(false));
+                btn.addEventListener('mouseleave', () => setButtonState(false));
             }
         });
 
@@ -274,42 +291,66 @@ class CatClashGame {
 
     setupTwoPlayerTouchControls() {
         const p1MoveButtons = {
-            'move-up-p1': { dx: 0, dy: -1 },
-            'move-down-p1': { dx: 0, dy: 1 },
-            'move-left-p1': { dx: -1, dy: 0 },
-            'move-right-p1': { dx: 1, dy: 0 }
+            'move-up-p1': { dir: 'up', dx: 0, dy: -1 },
+            'move-down-p1': { dir: 'down', dx: 0, dy: 1 },
+            'move-left-p1': { dir: 'left', dx: -1, dy: 0 },
+            'move-right-p1': { dir: 'right', dx: 1, dy: 0 }
         };
 
         Object.keys(p1MoveButtons).forEach(id => {
             const btn = document.querySelector(`.touch-btn.${id}`);
             if (btn) {
+                const setButtonState = (active) => {
+                    this.touchControls.kuro[p1MoveButtons[id].dir] = active;
+                };
+                
                 btn.addEventListener('touchstart', (e) => {
                     e.preventDefault();
-                    this.moveCat('kuro', p1MoveButtons[id].dx, p1MoveButtons[id].dy);
+                    setButtonState(true);
                 });
-                btn.addEventListener('mousedown', () => {
-                    this.moveCat('kuro', p1MoveButtons[id].dx, p1MoveButtons[id].dy);
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    setButtonState(false);
                 });
+                btn.addEventListener('touchcancel', (e) => {
+                    e.preventDefault();
+                    setButtonState(false);
+                });
+                btn.addEventListener('mousedown', () => setButtonState(true));
+                btn.addEventListener('mouseup', () => setButtonState(false));
+                btn.addEventListener('mouseleave', () => setButtonState(false));
             }
         });
 
         const p2MoveButtons = {
-            'move-up-p2': { dx: 0, dy: -1 },
-            'move-down-p2': { dx: 0, dy: 1 },
-            'move-left-p2': { dx: -1, dy: 0 },
-            'move-right-p2': { dx: 1, dy: 0 }
+            'move-up-p2': { dir: 'up', dx: 0, dy: -1 },
+            'move-down-p2': { dir: 'down', dx: 0, dy: 1 },
+            'move-left-p2': { dir: 'left', dx: -1, dy: 0 },
+            'move-right-p2': { dir: 'right', dx: 1, dy: 0 }
         };
 
         Object.keys(p2MoveButtons).forEach(id => {
             const btn = document.querySelector(`.touch-btn.${id}`);
             if (btn) {
+                const setButtonState = (active) => {
+                    this.touchControls.shiro[p2MoveButtons[id].dir] = active;
+                };
+                
                 btn.addEventListener('touchstart', (e) => {
                     e.preventDefault();
-                    this.moveCat('shiro', p2MoveButtons[id].dx, p2MoveButtons[id].dy);
+                    setButtonState(true);
                 });
-                btn.addEventListener('mousedown', () => {
-                    this.moveCat('shiro', p2MoveButtons[id].dx, p2MoveButtons[id].dy);
+                btn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    setButtonState(false);
                 });
+                btn.addEventListener('touchcancel', (e) => {
+                    e.preventDefault();
+                    setButtonState(false);
+                });
+                btn.addEventListener('mousedown', () => setButtonState(true));
+                btn.addEventListener('mouseup', () => setButtonState(false));
+                btn.addEventListener('mouseleave', () => setButtonState(false));
             }
         });
 
@@ -455,6 +496,10 @@ class CatClashGame {
         this.cats = [kuro, shiro];
         this.foodItems = [];
         this.foodSpawnTimer = 0;
+        this.touchControls = {
+            kuro: { up: false, down: false, left: false, right: false },
+            shiro: { up: false, down: false, left: false, right: false }
+        };
 
         this.battleSystem = new BattleSystem();
         this.battleSystem.init(this.cats);
@@ -512,8 +557,17 @@ class CatClashGame {
             }
 
             setTimeout(() => {
-                this.uiManager.showResult(winner);
+                this.uiManager.showResult(winner, this.battleSystem.roundWins);
             }, 1500);
+        };
+
+        this.battleSystem.onRoundEnd = (winner, round, roundWins) => {
+            const message = `第 ${round} 回合结束：${winner.name} 获胜！\n当前战绩：黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉`;
+            this.uiManager.showMessage(message, 2500);
+        };
+
+        this.battleSystem.onTurnChange = (turn) => {
+            this.uiManager.updateTurn(turn);
         };
 
         this.uiManager.updateHP(kuro);
@@ -662,6 +716,11 @@ class CatClashGame {
             if (this.keys['KeyS']) this.moveCat('kuro', 0, 0.12);
             if (this.keys['KeyA']) this.moveCat('kuro', -0.12, 0);
             if (this.keys['KeyD']) this.moveCat('kuro', 0.12, 0);
+            
+            if (this.touchControls.kuro.up) this.moveCat('kuro', 0, -0.12);
+            if (this.touchControls.kuro.down) this.moveCat('kuro', 0, 0.12);
+            if (this.touchControls.kuro.left) this.moveCat('kuro', -0.12, 0);
+            if (this.touchControls.kuro.right) this.moveCat('kuro', 0.12, 0);
         }
 
         if (shiro && !shiro.isDead && this.gameMode === 'local') {
@@ -669,6 +728,11 @@ class CatClashGame {
             if (this.keys['ArrowDown']) this.moveCat('shiro', 0, 0.12);
             if (this.keys['ArrowLeft']) this.moveCat('shiro', -0.12, 0);
             if (this.keys['ArrowRight']) this.moveCat('shiro', 0.12, 0);
+            
+            if (this.touchControls.shiro.up) this.moveCat('shiro', 0, -0.12);
+            if (this.touchControls.shiro.down) this.moveCat('shiro', 0, 0.12);
+            if (this.touchControls.shiro.left) this.moveCat('shiro', -0.12, 0);
+            if (this.touchControls.shiro.right) this.moveCat('shiro', 0.12, 0);
         }
     }
 
@@ -830,7 +894,7 @@ class CatClashGame {
                 if (defender.isDefending) {
                     finalDamage = Math.max(0, Math.floor(hit.damage * 0.5));
                 }
-                defender.takeDamage(finalDamage);
+                defender.takeDamage(finalDamage, attacker);
                 this.uiManager.showDamage(defender, finalDamage, false, null);
                 this.uiManager.updateHP(defender);
             });

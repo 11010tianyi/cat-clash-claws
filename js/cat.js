@@ -456,13 +456,20 @@ class Cat {
         return Math.max(1, Math.floor(damage));
     }
 
-    takeDamage(amount) {
+    takeDamage(amount, attacker) {
         this.hp = Math.max(0, this.hp - amount);
         this.isHurt = true;
         this.scale = 0.85;
         this.state = 'hurt';
 
-        this.x += (this.direction === 'left' ? 25 : -25);
+        if (attacker) {
+            const attackerCenterX = attacker.x + attacker.width / 2;
+            const defenderCenterX = this.x + this.width / 2;
+            const pushDirection = defenderCenterX > attackerCenterX ? 1 : -1;
+            this.x += pushDirection * 25;
+        } else {
+            this.x += (this.direction === 'left' ? 25 : -25);
+        }
         this.targetX = this.x;
 
         for (let i = 0; i < 12; i++) {

@@ -827,8 +827,16 @@ body {
 }
 
 .touch-controls.two-player {
+    position: absolute;
+    bottom: 20px;
+    left: 20px;
+    right: 20px;
+    display: none;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 0;
+    transform: none;
     flex-direction: row;
-    gap: 40px;
 }
 
 .player1-controls,
@@ -837,6 +845,14 @@ body {
     flex-direction: column;
     align-items: center;
     gap: 8px;
+}
+
+.player1-controls {
+    align-items: flex-start;
+}
+
+.player2-controls {
+    align-items: flex-end;
 }
 
 .player-label {

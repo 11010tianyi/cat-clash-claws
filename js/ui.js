@@ -280,13 +280,18 @@ class UIManager {
         }, duration);
     }
 
-    showResult(winner) {
+    showResult(winner, roundWins = { kuro: 0, shiro: 0 }) {
         this.showScreen('result');
         
         if (winner) {
             this.elements.resultBadge.textContent = '🏆';
-            this.elements.resultTitle.textContent = '胜利者';
-            this.elements.resultSubtitle.textContent = `${winner.name} 获得了胜利！`;
+            this.elements.resultTitle.textContent = '比赛结束';
+            this.elements.resultSubtitle.innerHTML = `
+                <div style="font-size: 32px; margin-bottom: 15px;">${winner.name} 获胜！</div>
+                <div style="font-size: 20px; color: #666;">
+                    最终比分：黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉
+                </div>
+            `;
             
             this.elements.winnerCat.innerHTML = winner.id === 'kuro' 
                 ? this.createCatPreviewSVG('black')
@@ -295,13 +300,19 @@ class UIManager {
             this.elements.winnerInfo.innerHTML = `
                 <h3>${winner.name}</h3>
                 <p>${winner.breed} · ${winner.gender} · ${winner.age}岁</p>
+                <p style="margin-top: 10px; font-size: 24px;">🏆 ${roundWins[winner.id]} 胜</p>
             `;
             
             this.createConfetti();
         } else {
             this.elements.resultBadge.textContent = '🤝';
             this.elements.resultTitle.textContent = '平局';
-            this.elements.resultSubtitle.textContent = '双方同时倒下！';
+            this.elements.resultSubtitle.innerHTML = `
+                <div style="font-size: 24px;">双方同时倒下！</div>
+                <div style="font-size: 18px; color: #666; margin-top: 10px;">
+                    最终比分：黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉
+                </div>
+            `;
             this.elements.winnerDisplay.style.display = 'none';
         }
     }
