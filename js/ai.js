@@ -191,9 +191,8 @@ class CatAI {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance > 150) {
-                const moveX = dx / distance * 2;
-                const moveY = dy / distance * 1.5;
-                game.moveCat('shiro', Math.sign(moveX), Math.sign(moveY));
+                const step = game.NORMAL_MOVE_SPEED;
+                game.moveCat('shiro', Math.sign(dx) * step, Math.sign(dy) * step);
             }
         }
     }
@@ -205,9 +204,8 @@ class CatAI {
             const distance = Math.sqrt(dx * dx + dy * dy);
             
             if (distance < 200) {
-                const moveX = dx / distance * 2;
-                const moveY = dy / distance * 1.5;
-                game.moveCat('shiro', Math.sign(moveX), Math.sign(moveY));
+                const step = game.NORMAL_MOVE_SPEED;
+                game.moveCat('shiro', Math.sign(dx) * step, Math.sign(dy) * step);
             }
         }
     }

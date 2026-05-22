@@ -12,25 +12,25 @@ class CatClashGame {
         this.keys = {};
         this.difficulty = 'medium';
         this.gameMode = 'ai';
-        this.characterStyle = 'cartoon';
+        this.characterStyle = 'photo';
         this.touchMode = 'auto';
         this.currentTouchPlayer = 'kuro';
         this.keyMappings = {
             kuro: {
-                'KeyW': () => this.moveCat('kuro', 0, -1),
-                'KeyS': () => this.moveCat('kuro', 0, 1),
-                'KeyA': () => this.moveCat('kuro', -1, 0),
-                'KeyD': () => this.moveCat('kuro', 1, 0),
+                'KeyW': () => this.moveCat('kuro', 0, -1, true),
+                'KeyS': () => this.moveCat('kuro', 0, 1, true),
+                'KeyA': () => this.moveCat('kuro', -1, 0, true),
+                'KeyD': () => this.moveCat('kuro', 1, 0, true),
                 'KeyJ': () => this.attackCat('kuro'),
                 'KeyK': () => this.defendCat('kuro'),
                 'KeyL': () => this.skillCat('kuro'),
                 'KeyU': () => this.fireProjectileCat('kuro')
             },
             shiro: {
-                'ArrowUp': () => this.moveCat('shiro', 0, -1),
-                'ArrowDown': () => this.moveCat('shiro', 0, 1),
-                'ArrowLeft': () => this.moveCat('shiro', -1, 0),
-                'ArrowRight': () => this.moveCat('shiro', 1, 0),
+                'ArrowUp': () => this.moveCat('shiro', 0, -1, true),
+                'ArrowDown': () => this.moveCat('shiro', 0, 1, true),
+                'ArrowLeft': () => this.moveCat('shiro', -1, 0, true),
+                'ArrowRight': () => this.moveCat('shiro', 1, 0, true),
                 'Numpad1': () => this.attackCat('shiro'),
                 'Numpad2': () => this.defendCat('shiro'),
                 'Numpad3': () => this.skillCat('shiro'),
@@ -61,6 +61,29 @@ class CatClashGame {
         // 冲撞状态
         this.rushingCats = {};
         this.rushTrails = [];
+
+        // 慢移/快移速度（单击与长按慢移共用 NORMAL_MOVE_SPEED）
+        this.fastMoveState = {
+            kuro: { active: false, direction: null, dx: 0, dy: 0 },
+            shiro: { active: false, direction: null, dx: 0, dy: 0 }
+        };
+        this.NORMAL_MOVE_SPEED = 3;
+        this.FAST_MOVE_SPEED = 6;
+        this.FAST_TAP_ENERGY_COST = 8;
+        this.FAST_MOVE_ENERGY_DRAIN = 0.35;
+        this.FAST_MOVE_MIN_ENERGY = 3;
+
+        this.selectedMap = 'sakura';
+        this.worldWidth = window.innerWidth;
+        this.worldHeight = window.innerHeight;
+        this.camera = { x: 0, y: 0 };
+        this.obstacles = [];
+        this.pendingRoundCheck = false;
+
+        this.directionKeyMap = {
+            kuro: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
+            shiro: { up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft', right: 'ArrowRight' }
+        };
     }
 
     init() {
@@ -83,16 +106,131 @@ class CatClashGame {
         this.setupModeButtons();
         this.setupStyleButtons();
         this.setupTouchModeButtons();
+        this.setupMapButtons();
         this.setupTouchControls();
         this.updateTouchControlsVisibility();
         this.showMenu();
     }
 
-    resizeCanvas() {
+    getMapPreset() {
+        return MAP_PRESETS[this.selectedMap] || MAP_PRESETS.sakura;
+    }
+
+    applyMapLayout() {
+        const preset = this.getMapPreset();
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        // 画布与世界同尺寸，大地图通过出生点与障碍布局体现，避免猫在屏外
+        this.worldWidth = vw;
+        this.worldHeight = vh;
+        this.mapPreset = preset;
+        this.mapScale = preset.scale;
+        this.camera = { x: 0, y: 0 };
+
         if (this.canvas) {
-            this.canvas.width = window.innerWidth;
-            this.canvas.height = window.innerHeight;
+            this.canvas.width = vw;
+            this.canvas.height = vh;
         }
+
+        this.obstacles = preset.obstacles.map((o, i) => ({
+            id: i,
+            x: o.x * this.worldWidth,
+            y: o.y * this.worldHeight,
+            w: o.w * this.worldWidth,
+            h: o.h * this.worldHeight,
+            kind: o.kind,
+            color: o.color
+        }));
+    }
+
+    resizeCanvas() {
+        this.applyMapLayout();
+    }
+
+    setupMapButtons() {
+        const buttons = document.querySelectorAll('.map-btn');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                buttons.forEach(b => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                this.selectedMap = btn.dataset.map;
+            });
+        });
+        const defaultBtn = document.querySelector('.map-btn[data-map="sakura"]');
+        if (defaultBtn) defaultBtn.classList.add('selected');
+    }
+
+    updateCamera() {
+        this.camera.x = 0;
+        this.camera.y = 0;
+    }
+
+    getCatSpawnPositions() {
+        const scale = this.mapScale || 1;
+        const w = this.worldWidth;
+        const h = this.worldHeight;
+        const catW = 160;
+        const edge = scale === 1 ? 0.12 : scale === 2 ? 0.08 : 0.05;
+        const y = h * 0.5 - 70;
+        return {
+            kuro: { x: w * edge, y },
+            shiro: { x: w * (1 - edge) - catW, y }
+        };
+    }
+
+    getWorldPadding() {
+        return 60;
+    }
+
+    getPlayBounds() {
+        const pad = this.getWorldPadding();
+        return {
+            minX: pad,
+            maxX: this.worldWidth - pad,
+            minY: Math.round(this.worldHeight * 0.2),
+            maxY: this.worldHeight - Math.round(this.worldHeight * 0.12)
+        };
+    }
+
+    clampCatToWorld(cat) {
+        const b = this.getPlayBounds();
+        const maxX = b.maxX - cat.width;
+        const maxY = b.maxY - cat.height;
+        cat.targetX = Utils.clamp(cat.targetX, b.minX, maxX);
+        cat.targetY = Utils.clamp(cat.targetY, b.minY, maxY);
+        cat.x = Utils.clamp(cat.x, b.minX, maxX);
+        cat.y = Utils.clamp(cat.y, b.minY, maxY);
+        this.resolveObstacleCollision(cat);
+    }
+
+    resolveObstacleCollision(cat) {
+        for (const obs of this.obstacles) {
+            if (!this.catOverlapsObstacle(cat, obs)) continue;
+            const catCx = cat.x + cat.width / 2;
+            const catCy = cat.y + cat.height / 2;
+            const obsCx = obs.x + obs.w / 2;
+            const obsCy = obs.y + obs.h / 2;
+            const dx = catCx - obsCx;
+            const dy = catCy - obsCy;
+            const overlapX = (cat.width / 2 + obs.w / 2) - Math.abs(dx);
+            const overlapY = (cat.height / 2 + obs.h / 2) - Math.abs(dy);
+            if (overlapX > 0 && overlapY > 0) {
+                if (overlapX < overlapY) {
+                    cat.x += dx > 0 ? overlapX + 2 : -(overlapX + 2);
+                } else {
+                    cat.y += dy > 0 ? overlapY + 2 : -(overlapY + 2);
+                }
+                cat.targetX = cat.x;
+                cat.targetY = cat.y;
+            }
+        }
+    }
+
+    catOverlapsObstacle(cat, obs) {
+        return cat.x < obs.x + obs.w &&
+            cat.x + cat.width > obs.x &&
+            cat.y < obs.y + obs.h &&
+            cat.y + cat.height > obs.y;
     }
 
     initBackgroundElements() {
@@ -131,7 +269,28 @@ class CatClashGame {
 
         document.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
+            this.handleDirectionKeyUp(e.code);
         });
+    }
+
+    handleDirectionKeyUp(code) {
+        for (const catId of ['kuro', 'shiro']) {
+            const map = this.directionKeyMap[catId];
+            const state = this.fastMoveState[catId];
+            if (!state?.active || !state.direction) continue;
+            if (map[state.direction] === code) {
+                state.active = false;
+                state.direction = null;
+            }
+        }
+    }
+
+    isDirectionHeld(catId, direction) {
+        const code = this.directionKeyMap[catId]?.[direction];
+        if (code && this.keys[code]) return true;
+
+        const touch = this.touchControls[catId];
+        return touch && touch[direction];
     }
 
     setupDifficultyButtons() {
@@ -498,21 +657,46 @@ class CatClashGame {
         }
     }
 
-    initBattle() {
-        const canvasWidth = this.canvas.width;
-        const canvasHeight = this.canvas.height;
+    resetBattleRuntimeState() {
+        this.keys = {};
+        this.rushingCats = {};
+        this.rushTrails = [];
+        this.consecutiveKeys = {
+            kuro: { lastDirection: null, pressCount: 0, lastPressTime: 0, lastRushTime: 0 },
+            shiro: { lastDirection: null, pressCount: 0, lastPressTime: 0, lastRushTime: 0 }
+        };
+        this.fastMoveState = {
+            kuro: { active: false, direction: null, dx: 0, dy: 0 },
+            shiro: { active: false, direction: null, dx: 0, dy: 0 }
+        };
+        if (this.battleSystem?.roundEndTimeout) {
+            clearTimeout(this.battleSystem.roundEndTimeout);
+            this.battleSystem.roundEndTimeout = null;
+        }
+    }
 
-        const kuro = new KuroCat(150, canvasHeight / 2 - 70, 'right', this.characterStyle);
-        const shiro = new ShiroCat(canvasWidth - 290, canvasHeight / 2 - 70, 'left', this.characterStyle);
+    initBattle() {
+        this.applyMapLayout();
+        const canvasWidth = this.worldWidth;
+        const canvasHeight = this.worldHeight;
+
+        this.resetBattleRuntimeState();
+
+        const kuro = new KuroCat(canvasWidth * 0.12, canvasHeight / 2 - 70, 'right', this.characterStyle);
+        const shiro = new ShiroCat(canvasWidth * 0.88 - 160, canvasHeight / 2 - 70, 'left', this.characterStyle);
 
         this.cats = [kuro, shiro];
         this.foodItems = [];
         this.foodSpawnTimer = 0;
+        this.heartsEffect = null;
         this.touchControls = {
             kuro: { up: false, down: false, left: false, right: false },
             shiro: { up: false, down: false, left: false, right: false }
         };
 
+        if (this.battleSystem) {
+            this.battleSystem.reset();
+        }
         this.battleSystem = new BattleSystem();
         this.battleSystem.init(this.cats);
 
@@ -528,6 +712,10 @@ class CatClashGame {
         };
 
         this.battleSystem.onDamage = (attacker, defender, damage, isCritical, attackResult) => {
+            if (defender.isDefending && damage > 0) {
+                audioManager.playPunchingBagBlockSound();
+            }
+
             this.uiManager.updateHP(defender);
             this.uiManager.showDamage(defender, damage, isCritical, attackResult);
             
@@ -574,19 +762,22 @@ class CatClashGame {
         };
 
         this.battleSystem.onRoundEnd = (winner, round, roundWins) => {
-            const message = `第 ${round} 回合结束：${winner.name} 获胜！\n当前战绩：黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉`;
+            this.rushingCats = {};
+            this.rushTrails = [];
+            const message = `第 ${round} 局结束：${winner.name} 获胜！\n当前比分：黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉（三局两胜）`;
             this.uiManager.showMessage(message, 2500);
+            this.uiManager.updateRound(round, roundWins);
         };
 
-        this.battleSystem.onTurnChange = (turn) => {
-            this.uiManager.updateTurn(turn);
+        this.battleSystem.onTurnChange = (round) => {
+            this.uiManager.updateRound(round, this.battleSystem.roundWins);
         };
 
         this.uiManager.updateHP(kuro);
         this.uiManager.updateHP(shiro);
         this.uiManager.updateEnergy(kuro);
         this.uiManager.updateEnergy(shiro);
-        this.uiManager.updateTurn(1);
+        this.uiManager.updateRound(1, { kuro: 0, shiro: 0 });
         
         const shiroIndicator = document.getElementById('shiro-indicator');
         if (shiroIndicator) {
@@ -595,78 +786,129 @@ class CatClashGame {
         }
     }
 
-    moveCat(catId, dx, dy) {
+    moveCat(catId, dx, dy, fromKeyPress = false) {
         const cat = this.cats.find(c => c.id === catId);
         if (!cat || cat.isDead) return;
-
-        // 连续按键处理
-        const now = Date.now();
-        const keyState = this.consecutiveKeys[catId];
-        
-        // 确定当前方向
-        let direction = null;
-        if (dx < 0) direction = 'left';
-        else if (dx > 0) direction = 'right';
-        else if (dy < 0) direction = 'up';
-        else if (dy > 0) direction = 'down';
-
-        if (direction) {
-            // 检查是否是快速连按同一个方向
-            const timeSinceLastPress = now - keyState.lastPressTime;
-            if (keyState.lastDirection === direction && timeSinceLastPress < 300) {
-                keyState.pressCount++;
-            } else {
-                keyState.pressCount = 1;
-            }
-            keyState.lastDirection = direction;
-            keyState.lastPressTime = now;
-
-            // 连按2次：快速移动
-            if (keyState.pressCount === 2) {
-                const fastMoveSpeed = 10;
-                cat.targetX += dx * fastMoveSpeed;
-                cat.targetY += dy * fastMoveSpeed;
-                if (dx > 0) cat.direction = 'right';
-                if (dx < 0) cat.direction = 'left';
-                this.createRushTrail(cat);
-            } 
-            // 连按3次：冲撞
-            else if (keyState.pressCount >= 3) {
-                const timeSinceLastRush = now - keyState.lastRushTime;
-                if (timeSinceLastRush >= 60000) { // 60秒冷却
-                    this.startRush(catId, direction);
-                    keyState.pressCount = 0;
-                    keyState.lastRushTime = now;
-                } else {
-                    // 冷却中，播放没力气了提示
-                    audioManager.playFoodPickupSound(); // 使用现有音效
-                    this.uiManager.showMessage("没力气了...", 1500);
-                    keyState.pressCount = 0;
-                }
-            } 
-            // 普通移动
-            else {
-                const moveSpeed = 5;
-                cat.targetX += dx * moveSpeed;
-                cat.targetY += dy * moveSpeed;
-                if (dx > 0) cat.direction = 'right';
-                if (dx < 0) cat.direction = 'left';
-            }
-        } else {
-            // 没有方向，普通移动
-            const moveSpeed = 5;
-            cat.targetX += dx * moveSpeed;
-            cat.targetY += dy * moveSpeed;
-            if (dx > 0) cat.direction = 'right';
-            if (dx < 0) cat.direction = 'left';
-        }
+        if (this.rushingCats[catId]?.active) return;
 
         const padding = 60;
-        cat.targetX = Utils.clamp(cat.targetX, padding, this.canvas.width - cat.width - padding);
-        cat.targetY = Utils.clamp(cat.targetY, 180, this.canvas.height - cat.height - 180);
+        const applyDirection = () => {
+            if (dx > 0) cat.direction = 'right';
+            else if (dx < 0) cat.direction = 'left';
+        };
 
-        cat.x = Utils.clamp(cat.x, padding, this.canvas.width - cat.width - padding);
-        cat.y = Utils.clamp(cat.y, 180, this.canvas.height - cat.height - 180);
+        // 长按慢移：调用方传入 ±NORMAL_MOVE_SPEED，与单击慢移同速
+        if (!fromKeyPress) {
+            cat.targetX += dx;
+            cat.targetY += dy;
+            applyDirection();
+        } else {
+            const now = Date.now();
+            const keyState = this.consecutiveKeys[catId];
+
+            let direction = null;
+            if (dx < 0) direction = 'left';
+            else if (dx > 0) direction = 'right';
+            else if (dy < 0) direction = 'up';
+            else if (dy > 0) direction = 'down';
+
+            if (direction) {
+                const timeSinceLastPress = now - keyState.lastPressTime;
+                if (keyState.lastDirection === direction && timeSinceLastPress < 300) {
+                    keyState.pressCount++;
+                } else {
+                    keyState.pressCount = 1;
+                }
+                keyState.lastDirection = direction;
+                keyState.lastPressTime = now;
+
+                if (keyState.pressCount === 2) {
+                    if (cat.energy < this.FAST_TAP_ENERGY_COST + this.FAST_MOVE_MIN_ENERGY) {
+                        this.uiManager.showMessage('能量不足，无法快移', 1200);
+                        keyState.pressCount = 0;
+                    } else {
+                        cat.energy = Math.max(0, cat.energy - this.FAST_TAP_ENERGY_COST);
+                        this.uiManager.updateEnergy(cat);
+                        cat.targetX += dx * this.FAST_MOVE_SPEED;
+                        cat.targetY += dy * this.FAST_MOVE_SPEED;
+                        applyDirection();
+                        this.createRushTrail(cat);
+                        this.activateFastMove(catId, direction, dx, dy);
+                    }
+                } else if (keyState.pressCount >= 3) {
+                    this.deactivateFastMove(catId);
+                    const timeSinceLastRush = now - keyState.lastRushTime;
+                    if (timeSinceLastRush >= 60000) {
+                        this.startRush(catId, direction);
+                        keyState.pressCount = 0;
+                        keyState.lastRushTime = now;
+                    } else {
+                        this.uiManager.showMessage('没力气了...', 1500);
+                        keyState.pressCount = 0;
+                    }
+                } else {
+                    cat.targetX += dx * this.NORMAL_MOVE_SPEED;
+                    cat.targetY += dy * this.NORMAL_MOVE_SPEED;
+                    applyDirection();
+                }
+            } else {
+                cat.targetX += dx * this.NORMAL_MOVE_SPEED;
+                cat.targetY += dy * this.NORMAL_MOVE_SPEED;
+                applyDirection();
+            }
+        }
+
+        this.clampCatToWorld(cat);
+    }
+
+    activateFastMove(catId, direction, dx, dy) {
+        if (!this.fastMoveState[catId]) return;
+        const cat = this.cats.find(c => c.id === catId);
+        if (!cat || cat.energy < this.FAST_MOVE_MIN_ENERGY) return;
+
+        this.fastMoveState[catId] = {
+            active: true,
+            direction,
+            dx: dx || 0,
+            dy: dy || 0
+        };
+    }
+
+    deactivateFastMove(catId) {
+        if (!this.fastMoveState[catId]) return;
+        this.fastMoveState[catId].active = false;
+        this.fastMoveState[catId].direction = null;
+    }
+
+    applyFastMoveHold(catId, cat) {
+        const state = this.fastMoveState[catId];
+        if (!state?.active || !state.direction) return false;
+
+        if (!this.isDirectionHeld(catId, state.direction)) {
+            this.deactivateFastMove(catId);
+            return false;
+        }
+
+        if (cat.energy < this.FAST_MOVE_MIN_ENERGY) {
+            this.deactivateFastMove(catId);
+            this.uiManager.showMessage('能量不足，快移结束', 1000);
+            return false;
+        }
+
+        cat.targetX += state.dx * this.FAST_MOVE_SPEED;
+        cat.targetY += state.dy * this.FAST_MOVE_SPEED;
+        if (state.dx > 0) cat.direction = 'right';
+        else if (state.dx < 0) cat.direction = 'left';
+
+        cat.energy = Math.max(0, cat.energy - this.FAST_MOVE_ENERGY_DRAIN);
+        this.uiManager.updateEnergy(cat);
+
+        if (Math.random() > 0.7) {
+            this.createRushTrail(cat);
+        }
+
+        this.clampCatToWorld(cat);
+        return true;
     }
 
     createRushTrail(cat) {
@@ -697,23 +939,22 @@ class CatClashGame {
 
         cat.isAttacking = true;
 
-        // 计算冲撞终点
-        const padding = 60;
+        const b = this.getPlayBounds();
         let targetX = cat.x;
         let targetY = cat.y;
 
         switch (direction) {
             case 'left':
-                targetX = padding;
+                targetX = b.minX;
                 break;
             case 'right':
-                targetX = this.canvas.width - cat.width - padding;
+                targetX = b.maxX - cat.width;
                 break;
             case 'up':
-                targetY = 180;
+                targetY = b.minY;
                 break;
             case 'down':
-                targetY = this.canvas.height - cat.height - 180;
+                targetY = b.maxY - cat.height;
                 break;
         }
 
@@ -747,10 +988,10 @@ class CatClashGame {
                 if (dist < 100) {
                     // 碰撞！把对方撞到边界
                     const pushDirectionX = dx > 0 ? 1 : -1;
-                    const padding = 60;
+                    const b = this.getPlayBounds();
                     const targetX = pushDirectionX > 0 
-                        ? this.canvas.width - otherCat.width - padding 
-                        : padding;
+                        ? b.maxX - otherCat.width 
+                        : b.minX;
                     
                     otherCat.targetX = targetX;
                     otherCat.x = otherCat.targetX;
@@ -764,12 +1005,11 @@ class CatClashGame {
                 }
             }
 
-            // 结束冲撞
             if (progress >= 1) {
                 rush.active = false;
                 cat.isAttacking = false;
+                delete this.rushingCats[catId];
             }
-            this.rushingCats[catId].active = false;
         }
 
         // 更新轨迹
@@ -847,6 +1087,20 @@ class CatClashGame {
     }
 
     restart() {
+        this.isRunning = false;
+        if (this.animationId) {
+            cancelAnimationFrame(this.animationId);
+            this.animationId = null;
+        }
+        this.resetBattleRuntimeState();
+        if (this.battleSystem) {
+            this.battleSystem.reset();
+            this.battleSystem = null;
+        }
+        const winnerDisplay = document.getElementById('winner-display');
+        if (winnerDisplay) {
+            winnerDisplay.style.display = '';
+        }
         this.start();
     }
 
@@ -877,7 +1131,9 @@ class CatClashGame {
             }
         }
 
+        this.updateDefendHold();
         this.handleKeyHold();
+        this.updateCamera();
 
         this.checkCollision();
         this.updateRush(deltaTime);
@@ -893,6 +1149,24 @@ class CatClashGame {
         this.uiManager.updateEnergy(this.cats.find(c => c.id === 'shiro'));
     }
 
+    updateDefendHold() {
+        if (this.state !== 'battle') return;
+
+        const kuro = this.cats.find(c => c.id === 'kuro');
+        const shiro = this.cats.find(c => c.id === 'shiro');
+
+        if (kuro && !kuro.isDead && !kuro.isDying) {
+            if (this.keys['KeyK']) {
+                kuro.extendDefend();
+            }
+        }
+        if (shiro && !shiro.isDead && !shiro.isDying && this.gameMode === 'local') {
+            if (this.keys['Numpad2']) {
+                shiro.extendDefend();
+            }
+        }
+    }
+
     handleKeyHold() {
         if (this.state !== 'battle') return;
 
@@ -900,27 +1174,33 @@ class CatClashGame {
         const shiro = this.cats.find(c => c.id === 'shiro');
 
         if (kuro && !kuro.isDead) {
-            if (this.keys['KeyW']) this.moveCat('kuro', 0, -0.12);
-            if (this.keys['KeyS']) this.moveCat('kuro', 0, 0.12);
-            if (this.keys['KeyA']) this.moveCat('kuro', -0.12, 0);
-            if (this.keys['KeyD']) this.moveCat('kuro', 0.12, 0);
-            
-            if (this.touchControls.kuro.up) this.moveCat('kuro', 0, -0.12);
-            if (this.touchControls.kuro.down) this.moveCat('kuro', 0, 0.12);
-            if (this.touchControls.kuro.left) this.moveCat('kuro', -0.12, 0);
-            if (this.touchControls.kuro.right) this.moveCat('kuro', 0.12, 0);
+            if (!this.applyFastMoveHold('kuro', kuro)) {
+            const ms = this.NORMAL_MOVE_SPEED;
+            if (this.keys['KeyW']) this.moveCat('kuro', 0, -ms);
+            if (this.keys['KeyS']) this.moveCat('kuro', 0, ms);
+            if (this.keys['KeyA']) this.moveCat('kuro', -ms, 0);
+            if (this.keys['KeyD']) this.moveCat('kuro', ms, 0);
+
+            if (this.touchControls.kuro.up) this.moveCat('kuro', 0, -ms);
+            if (this.touchControls.kuro.down) this.moveCat('kuro', 0, ms);
+            if (this.touchControls.kuro.left) this.moveCat('kuro', -ms, 0);
+            if (this.touchControls.kuro.right) this.moveCat('kuro', ms, 0);
+            }
         }
 
         if (shiro && !shiro.isDead && this.gameMode === 'local') {
-            if (this.keys['ArrowUp']) this.moveCat('shiro', 0, -0.12);
-            if (this.keys['ArrowDown']) this.moveCat('shiro', 0, 0.12);
-            if (this.keys['ArrowLeft']) this.moveCat('shiro', -0.12, 0);
-            if (this.keys['ArrowRight']) this.moveCat('shiro', 0.12, 0);
-            
-            if (this.touchControls.shiro.up) this.moveCat('shiro', 0, -0.12);
-            if (this.touchControls.shiro.down) this.moveCat('shiro', 0, 0.12);
-            if (this.touchControls.shiro.left) this.moveCat('shiro', -0.12, 0);
-            if (this.touchControls.shiro.right) this.moveCat('shiro', 0.12, 0);
+            if (!this.applyFastMoveHold('shiro', shiro)) {
+            const ms = this.NORMAL_MOVE_SPEED;
+            if (this.keys['ArrowUp']) this.moveCat('shiro', 0, -ms);
+            if (this.keys['ArrowDown']) this.moveCat('shiro', 0, ms);
+            if (this.keys['ArrowLeft']) this.moveCat('shiro', -ms, 0);
+            if (this.keys['ArrowRight']) this.moveCat('shiro', ms, 0);
+
+            if (this.touchControls.shiro.up) this.moveCat('shiro', 0, -ms);
+            if (this.touchControls.shiro.down) this.moveCat('shiro', 0, ms);
+            if (this.touchControls.shiro.left) this.moveCat('shiro', -ms, 0);
+            if (this.touchControls.shiro.right) this.moveCat('shiro', ms, 0);
+            }
         }
     }
 
@@ -969,9 +1249,12 @@ class CatClashGame {
 
     checkGameOverCheck() {
         for (const cat of this.cats) {
-            if (cat.hp <= 0 && !cat.isDead) {
-                cat.die();
+            if (cat.hp <= 0 && !cat.isDead && !cat.isDying) {
+                cat.beginDeathAnimation();
             }
+        }
+        if (this.cats.some(c => c.isDying)) {
+            return;
         }
         this.battleSystem.checkWinCondition();
     }
@@ -1022,10 +1305,10 @@ class CatClashGame {
 
         const healAmount = Math.floor(Math.random() * (selectedFood.healMax - selectedFood.healMin + 1)) + selectedFood.healMin;
         const isStayingOnGround = Math.random() < 0.15;
-        const groundY = this.canvas.height * 0.78 - 30;
+        const groundY = this.worldHeight * 0.78 - 30;
 
         const foodItem = {
-            x: Math.random() * (this.canvas.width - 100) + 50,
+            x: Math.random() * (this.worldWidth - 100) + 50,
             y: -30,
             vy: 2 + Math.random() * 1.5,
             rotation: 0,
@@ -1127,11 +1410,12 @@ class CatClashGame {
 
             const hits = attacker.checkProjectileHits(defender, this.canvas);
             hits.forEach(hit => {
-                audioManager.playHitSound();
-
                 let finalDamage = hit.damage;
                 if (defender.isDefending) {
-                    finalDamage = Math.max(0, Math.floor(hit.damage * 0.5));
+                    audioManager.playShieldBlockProjectileSound();
+                    finalDamage = Math.max(0, Math.floor(hit.damage * 0.35));
+                } else {
+                    audioManager.playHitSound();
                 }
                 defender.takeDamage(finalDamage, attacker);
                 this.uiManager.showDamage(defender, finalDamage, false, null);
@@ -1144,13 +1428,58 @@ class CatClashGame {
         if (!this.ctx) return;
 
         this.renderBackground();
-        this.renderGround();
         this.renderClouds();
         this.renderPetals();
+
+        this.ctx.save();
+        this.ctx.translate(-this.camera.x, -this.camera.y);
+        this.renderWorldGround();
+        this.renderObstacles();
         this.renderRushTrails();
-        this.renderCats();
         this.renderFood();
+        this.renderCats();
+        this.ctx.restore();
+
         this.renderHeartsEffect();
+    }
+
+    renderObstacles() {
+        const preset = this.mapPreset || MAP_PRESETS.sakura;
+        this.obstacles.forEach(obs => {
+            this.ctx.save();
+            this.ctx.fillStyle = obs.color;
+            this.ctx.globalAlpha = 0.92;
+            const r = 12;
+            this.ctx.beginPath();
+            if (this.ctx.roundRect) {
+                this.ctx.roundRect(obs.x, obs.y, obs.w, obs.h, r);
+            } else {
+                this.ctx.rect(obs.x, obs.y, obs.w, obs.h);
+            }
+            this.ctx.fill();
+
+            if (obs.kind === 'bamboo') {
+                this.ctx.strokeStyle = 'rgba(45, 90, 61, 0.6)';
+                this.ctx.lineWidth = 3;
+                for (let i = 0; i < 4; i++) {
+                    const bx = obs.x + obs.w * (0.2 + i * 0.2);
+                    this.ctx.beginPath();
+                    this.ctx.moveTo(bx, obs.y);
+                    this.ctx.lineTo(bx, obs.y + obs.h);
+                    this.ctx.stroke();
+                }
+            } else if (obs.kind === 'pond') {
+                this.ctx.fillStyle = 'rgba(255,255,255,0.25)';
+                this.ctx.beginPath();
+                this.ctx.ellipse(obs.x + obs.w / 2, obs.y + obs.h / 2, obs.w * 0.35, obs.h * 0.3, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            } else if (obs.kind === 'pillar') {
+                this.ctx.fillStyle = 'rgba(0,0,0,0.15)';
+                this.ctx.fillRect(obs.x + 8, obs.y + obs.h - 12, obs.w - 16, 12);
+            }
+
+            this.ctx.restore();
+        });
     }
 
     renderRushTrails() {
@@ -1205,11 +1534,9 @@ class CatClashGame {
     }
 
     renderBackground() {
+        const preset = this.mapPreset || MAP_PRESETS.sakura;
         const gradient = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
-        gradient.addColorStop(0, '#ffecd2');
-        gradient.addColorStop(0.3, '#fcb69f');
-        gradient.addColorStop(0.6, '#e0c3fc');
-        gradient.addColorStop(1, '#8ec5fc');
+        preset.skyStops.forEach(([pos, color]) => gradient.addColorStop(pos, color));
 
         this.ctx.fillStyle = gradient;
         this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1226,31 +1553,33 @@ class CatClashGame {
         }
     }
 
-    renderGround() {
-        const groundY = this.canvas.height * 0.78;
+    renderWorldGround() {
+        const preset = this.mapPreset || MAP_PRESETS.sakura;
+        const groundY = this.worldHeight * 0.78;
         
-        const groundGradient = this.ctx.createLinearGradient(0, groundY, 0, this.canvas.height);
-        groundGradient.addColorStop(0, '#98D8C8');
-        groundGradient.addColorStop(0.3, '#7CCD7C');
-        groundGradient.addColorStop(1, '#6BBF6B');
+        const groundGradient = this.ctx.createLinearGradient(0, groundY, 0, this.worldHeight);
+        groundGradient.addColorStop(0, preset.ground.top);
+        groundGradient.addColorStop(0.3, preset.ground.mid);
+        groundGradient.addColorStop(1, preset.ground.bottom);
 
         this.ctx.fillStyle = groundGradient;
         this.ctx.beginPath();
         this.ctx.moveTo(0, groundY);
         
-        for (let x = 0; x <= this.canvas.width; x += 40) {
+        for (let x = 0; x <= this.worldWidth; x += 40) {
             const waveY = Math.sin(x * 0.015 + Date.now() * 0.001) * 6;
             this.ctx.lineTo(x, groundY + waveY);
         }
         
-        this.ctx.lineTo(this.canvas.width, this.canvas.height);
-        this.ctx.lineTo(0, this.canvas.height);
+        this.ctx.lineTo(this.worldWidth, this.worldHeight);
+        this.ctx.lineTo(0, this.worldHeight);
         this.ctx.closePath();
         this.ctx.fill();
 
-        this.ctx.fillStyle = 'rgba(144, 238, 144, 0.4)';
-        for (let i = 0; i < 25; i++) {
-            const x = (i * 90 + 30) % this.canvas.width;
+        const grassColor = preset.id === 'canyon' ? 'rgba(160, 140, 100, 0.45)' : 'rgba(144, 238, 144, 0.4)';
+        this.ctx.fillStyle = grassColor;
+        for (let i = 0; i < Math.ceil(this.worldWidth / 90); i++) {
+            const x = i * 90 + 30;
             const baseY = groundY + 15 + (i % 3) * 15;
             const height = 20 + Math.sin(i) * 8;
             
@@ -1263,15 +1592,17 @@ class CatClashGame {
             this.ctx.fill();
         }
         
-        for (let i = 0; i < 15; i++) {
-            const x = (i * 120 + 60) % this.canvas.width;
-            const baseY = groundY + 25;
-            const height = 15 + Math.cos(i) * 5;
-            
-            this.ctx.fillStyle = 'rgba(255, 182, 193, 0.6)';
-            this.ctx.beginPath();
-            this.ctx.ellipse(x, baseY - height / 2, 8, height / 2, 0, 0, Math.PI * 2);
-            this.ctx.fill();
+        if (preset.id === 'sakura') {
+            for (let i = 0; i < Math.ceil(this.worldWidth / 120); i++) {
+                const x = i * 120 + 60;
+                const baseY = groundY + 25;
+                const height = 15 + Math.cos(i) * 5;
+                
+                this.ctx.fillStyle = 'rgba(255, 182, 193, 0.6)';
+                this.ctx.beginPath();
+                this.ctx.ellipse(x, baseY - height / 2, 8, height / 2, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
         }
     }
 

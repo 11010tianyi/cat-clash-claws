@@ -56,11 +56,29 @@
                 <div class="style-section">
                     <h3 class="style-title">🎨 角色形象</h3>
                     <div class="style-buttons">
+                        <button class="style-btn photo selected" data-style="photo">
+                            📷 真实照片
+                        </button>
                         <button class="style-btn cartoon" data-style="cartoon">
                             ✏️ 动画形象
                         </button>
-                        <button class="style-btn photo" data-style="photo">
-                            📷 真实照片
+                    </div>
+                </div>
+
+                <div class="map-section">
+                    <h3 class="map-title">🗺️ 选择地图</h3>
+                    <div class="map-buttons">
+                        <button class="map-btn" data-map="sakura">
+                            🌸 樱花庭院
+                            <span class="map-desc">标准场地</span>
+                        </button>
+                        <button class="map-btn" data-map="bamboo">
+                            🎋 竹海秘境
+                            <span class="map-desc">场地 ×2</span>
+                        </button>
+                        <button class="map-btn" data-map="canyon">
+                            🏜️ 峡谷遗迹
+                            <span class="map-desc">场地 ×3</span>
                         </button>
                     </div>
                 </div>
@@ -210,7 +228,7 @@
             
             <!-- 中间信息 -->
             <div class="battle-info">
-                <div class="turn-indicator">第 <span id="turn-count">1</span> 回合</div>
+                <div class="turn-indicator">第 <span id="turn-count">1（0:0）</span> 局 · 三局两胜</div>
                 <div class="action-hint" id="action-hint">准备好了吗？</div>
             </div>
             
@@ -319,6 +337,7 @@
     <script src="js/battle.js"></script>
     <script src="js/ui.js"></script>
     <script src="js/ai.js"></script>
+    <script src="js/maps.js"></script>
     <script src="js/game.js"></script>
 
     <script>

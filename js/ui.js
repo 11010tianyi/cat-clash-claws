@@ -128,8 +128,12 @@ class UIManager {
     }
 
     updateTurn(turn) {
+        this.updateRound(turn, { kuro: 0, shiro: 0 });
+    }
+
+    updateRound(round, roundWins = { kuro: 0, shiro: 0 }) {
         if (this.elements.turnCount) {
-            this.elements.turnCount.textContent = turn;
+            this.elements.turnCount.textContent = `${round}（${roundWins.kuro}:${roundWins.shiro}）`;
         }
     }
 
@@ -171,8 +175,9 @@ class UIManager {
         }
         damageEl.textContent = text;
         
-        const catX = cat.x + cat.width / 2;
-        const catY = cat.y;
+        const cam = window.game?.camera || { x: 0, y: 0 };
+        const catX = cat.x - cam.x + cat.width / 2;
+        const catY = cat.y - cam.y;
         
         damageEl.style.left = `${catX}px`;
         damageEl.style.top = `${catY}px`;
@@ -191,8 +196,9 @@ class UIManager {
         dodgeEl.className = 'damage-popup dodge';
         dodgeEl.textContent = '闪避!';
         
-        const catX = cat.x + cat.width / 2;
-        const catY = cat.y;
+        const cam = window.game?.camera || { x: 0, y: 0 };
+        const catX = cat.x - cam.x + cat.width / 2;
+        const catY = cat.y - cam.y;
         
         dodgeEl.style.left = `${catX}px`;
         dodgeEl.style.top = `${catY}px`;
@@ -211,8 +217,9 @@ class UIManager {
         comboEl.className = 'damage-popup combo';
         comboEl.textContent = `COMBO x${combo}!`;
         
-        const catX = cat.x + cat.width / 2;
-        const catY = cat.y - 60;
+        const cam = window.game?.camera || { x: 0, y: 0 };
+        const catX = cat.x - cam.x + cat.width / 2;
+        const catY = cat.y - cam.y - 60;
         
         comboEl.style.left = `${catX}px`;
         comboEl.style.top = `${catY}px`;
@@ -399,20 +406,16 @@ class UIManager {
         if (!this.elements.damageNumbers) return;
 
         const dialogEl = document.createElement('div');
-        dialogEl.className = 'cat-dialog';
+        dialogEl.className = `cat-dialog ${cat.id === 'kuro' ? 'kuro-dialog' : 'shiro-dialog'}`;
         dialogEl.textContent = text;
 
-        const catX = cat.x + cat.width / 2;
-        const catY = cat.y - 40;
+        const cam = window.game?.camera || { x: 0, y: 0 };
+        const catX = cat.x - cam.x + cat.width / 2;
+        const catY = cat.y - cam.y - 20;
 
         dialogEl.style.left = `${catX}px`;
         dialogEl.style.top = `${catY}px`;
-        
-        if (cat.id === 'kuro') {
-            dialogEl.style.marginLeft = '-100px';
-        } else {
-            dialogEl.style.marginLeft = '-100px';
-        }
+        dialogEl.style.transform = 'translate(-50%, -100%)';
 
         this.elements.damageNumbers.appendChild(dialogEl);
 

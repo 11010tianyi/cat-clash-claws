@@ -5,6 +5,8 @@ class AudioManager {
         this.isMuted = false;
         this.masterVolume = 0.5;
         this.bgMusicPlaying = false;
+        this.speechVoices = [];
+        this.currentSpeechCatId = null;
     }
 
     init() {
@@ -16,6 +18,80 @@ class AudioManager {
         } catch (e) {
             console.warn('Web Audio API not supported');
         }
+
+        this.initSpeechVoices();
+    }
+
+    initSpeechVoices() {
+        if (!('speechSynthesis' in window)) return;
+
+        const loadVoices = () => {
+            this.speechVoices = window.speechSynthesis.getVoices();
+        };
+
+        loadVoices();
+        window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+
+    pickSpeechVoice(catId) {
+        const zhVoices = this.speechVoices.filter(v => v.lang && v.lang.includes('zh'));
+        if (zhVoices.length === 0) return null;
+
+        const preferFemale = catId === 'shiro';
+        const nameMatch = (v) => {
+            const n = (v.name || '').toLowerCase();
+            if (preferFemale) {
+                return n.includes('女') || n.includes('female') || n.includes('ting') || n.includes('mei');
+            }
+            return n.includes('男') || n.includes('male') || n.includes('yun') || n.includes('gang');
+        };
+
+        return zhVoices.find(nameMatch) || zhVoices[0];
+    }
+
+    speakDialog(text, catId) {
+        if (!text || this.isMuted) return;
+
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            const utterance = new SpeechSynthesisUtterance(text);
+            utterance.lang = 'zh-CN';
+            utterance.volume = this.masterVolume;
+
+            if (catId === 'kuro') {
+                utterance.pitch = 0.78;
+                utterance.rate = 0.95;
+            } else {
+                utterance.pitch = 1.22;
+                utterance.rate = 1.05;
+            }
+
+            const voice = this.pickSpeechVoice(catId);
+            if (voice) utterance.voice = voice;
+
+            this.currentSpeechCatId = catId;
+            utterance.onend = () => {
+                if (this.currentSpeechCatId === catId) {
+                    this.currentSpeechCatId = null;
+                }
+            };
+
+            window.speechSynthesis.speak(utterance);
+            return;
+        }
+
+        if (catId === 'kuro') {
+            this.playKuroDialogSound();
+        } else {
+            this.playShiroDialogSound();
+        }
+    }
+
+    stopSpeech() {
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+        }
+        this.currentSpeechCatId = null;
     }
 
     playNote(frequency, duration, type = 'sine', volume = 0.3) {
@@ -83,6 +159,24 @@ class AudioManager {
         this.playNote(150, 0.1, 'sawtooth', 0.4);
         this.playNote(100, 0.15, 'square', 0.3);
         this.playNote(80, 0.2, 'triangle', 0.25);
+    }
+
+    /** 暗器被护盾挡下 — 敲盾 */
+    playShieldBlockProjectileSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        this.playNote(880, 0.06, 'triangle', 0.35);
+        setTimeout(() => this.playNote(660, 0.08, 'sine', 0.3), 40);
+        setTimeout(() => this.playNote(520, 0.1, 'square', 0.22), 90);
+    }
+
+    /** 近战被护盾挡下 — 打沙包 */
+    playPunchingBagBlockSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        this.playNote(120, 0.14, 'sine', 0.38);
+        setTimeout(() => this.playNote(90, 0.12, 'triangle', 0.28), 55);
+        setTimeout(() => this.playNote(70, 0.16, 'sine', 0.2), 110);
     }
 
     playCriticalSound() {
@@ -203,16 +297,18 @@ class AudioManager {
         if (!this.isInitialized || this.isMuted) return;
 
         const baseFreq = 480;
-        this.playNote(baseFreq, 0.12, 'sine', 0.35);
+        this.playNote(baseFreq, 0.1, 'sine', 0.38);
+        this.playNote(baseFreq * 2, 0.08, 'triangle', 0.18);
         setTimeout(() => {
-            this.playNote(baseFreq * 1.2, 0.1, 'sine', 0.3);
-        }, 70);
+            this.playNote(baseFreq * 1.25, 0.09, 'sine', 0.32);
+            this.playNote(baseFreq * 2.5, 0.07, 'triangle', 0.14);
+        }, 65);
         setTimeout(() => {
-            this.playNote(baseFreq * 0.9, 0.08, 'sine', 0.25);
+            this.playNote(baseFreq * 1.1, 0.08, 'sine', 0.28);
         }, 120);
         setTimeout(() => {
-            this.playNote(baseFreq * 1.3, 0.06, 'sine', 0.2);
-        }, 170);
+            this.playNote(baseFreq * 1.35, 0.06, 'sine', 0.22);
+        }, 165);
     }
 
     playProjectileSound() {
@@ -269,6 +365,7 @@ class AudioManager {
         this.isMuted = !this.isMuted;
         if (this.isMuted) {
             this.stopBackgroundMusic();
+            this.stopSpeech();
         }
         return this.isMuted;
     }

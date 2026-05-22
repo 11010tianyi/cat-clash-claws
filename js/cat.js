@@ -12,12 +12,16 @@ class Cat {
         this.height = 160;
         this.baseSpeed = 5;
 
-        // 对话系统
+        // 对话系统（血量低于 70% 时触发）
         this.dialogTimer = 0;
         this.nextDialogTime = 0;
         this.dialogCooldown = false;
+        this.hitDialogCooldown = false;
+        this.dialogLowHpActive = false;
         this.kuroDialogs = ['喵~', '喵！', '喵呜~', '喵喵！'];
         this.shiroDialogs = ['你把我打疼了！', '快停下黑茶！', '你个傻猫！', '呜呜呜...', '我生气了！', '等等，先别打...', '你轻点！'];
+        this.kuroHitDialogs = ['好痛！', '别打了！', '呜…', '轻一点！'];
+        this.shiroHitDialogs = ['好疼啊！', '黑茶你太过分了！', '我要生气了！', '呜呜别打了！', '住手！'];
 
         this.maxHp = config.maxHp;
         this.hp = this.maxHp;
@@ -37,9 +41,14 @@ class Cat {
         this.animationTime = 0;
 
         this.isDefending = false;
+        this.defendUntil = 0;
         this.isAttacking = false;
         this.isHurt = false;
         this.isDead = false;
+        this.isDying = false;
+        this.deathAnimComplete = false;
+        this.deathStartTime = 0;
+        this.deathDuration = 2200;
 
         this.attackCooldown = 0;
         this.attackCooldownMax = 25;
@@ -105,7 +114,19 @@ class Cat {
     }
 
     update(deltaTime) {
+        if (this.isDying) {
+            this.updateDeathAnimation(deltaTime);
+            return;
+        }
         if (this.isDead) return;
+
+        if (this.defendUntil && Date.now() > this.defendUntil) {
+            if (this.isDefending && this.state === 'defend') {
+                this.isDefending = false;
+                this.state = 'idle';
+            }
+            this.defendUntil = 0;
+        }
 
         this.animationTime += deltaTime;
         this.breathPhase += deltaTime * 0.003;
@@ -149,8 +170,8 @@ class Cat {
             this.scale = Utils.lerp(this.scale, 1.15, 0.25);
         }
 
-        this.x = Utils.lerp(this.x, this.targetX, 0.12);
-        this.y = Utils.lerp(this.y, this.targetY, 0.12);
+        this.x = Utils.lerp(this.x, this.targetX, 0.24);
+        this.y = Utils.lerp(this.y, this.targetY, 0.24);
 
         this.earWiggle = Math.sin(this.animationTime * 0.01) * 0.1;
 
@@ -178,43 +199,75 @@ class Cat {
         this.updateDialog(deltaTime);
     }
 
+    resetDialogState() {
+        this.dialogTimer = 0;
+        this.nextDialogTime = 0;
+        this.dialogCooldown = false;
+        this.hitDialogCooldown = false;
+        this.dialogLowHpActive = false;
+    }
+
+    pickRandomLine(pool) {
+        return pool[Math.floor(Math.random() * pool.length)];
+    }
+
+    showDialogLine(text, cooldownMs = 3000) {
+        if (window.audioManager) {
+            window.audioManager.speakDialog(text, this.id);
+        }
+        if (window.game?.uiManager) {
+            window.game.uiManager.showDialog(this, text);
+        }
+
+        this.dialogCooldown = true;
+        setTimeout(() => {
+            this.dialogCooldown = false;
+        }, cooldownMs);
+    }
+
+    triggerLowHpDialog() {
+        const dialogs = this.id === 'kuro' ? this.kuroDialogs : this.shiroDialogs;
+        this.showDialogLine(this.pickRandomLine(dialogs));
+        this.dialogTimer = 0;
+        this.nextDialogTime = 5000 + Math.random() * 35000;
+    }
+
+    tryHitDialog() {
+        if (this.isDead) return;
+        const hpRatio = this.hp / this.maxHp;
+        if (hpRatio >= 0.4) return;
+        if (this.hitDialogCooldown) return;
+        if (Math.random() > 0.55) return;
+
+        const pool = this.id === 'kuro' ? this.kuroHitDialogs : this.shiroHitDialogs;
+        this.showDialogLine(this.pickRandomLine(pool), 1500);
+
+        this.hitDialogCooldown = true;
+        setTimeout(() => {
+            this.hitDialogCooldown = false;
+        }, 1500);
+    }
+
     updateDialog(deltaTime) {
         if (this.isDead) return;
 
-        // 血量低于70%时才会说话
-        if (this.hp / this.maxHp >= 0.7) {
+        const hpRatio = this.hp / this.maxHp;
+
+        if (hpRatio >= 0.7) {
+            this.dialogLowHpActive = false;
             return;
+        }
+
+        if (!this.dialogLowHpActive) {
+            this.dialogLowHpActive = true;
+            this.dialogTimer = 0;
+            this.nextDialogTime = 600;
         }
 
         this.dialogTimer += deltaTime;
 
         if (!this.dialogCooldown && this.dialogTimer >= this.nextDialogTime) {
-            this.dialogCooldown = true;
-
-            // 随机选择下一次对话时间（5-40秒）
-            this.nextDialogTime = 5000 + Math.random() * 35000;
-            this.dialogTimer = 0;
-
-            // 播放对话音效
-            if (window.game && window.audioManager) {
-                if (this.id === 'kuro') {
-                    window.audioManager.playKuroDialogSound();
-                } else {
-                    window.audioManager.playShiroDialogSound();
-                }
-            }
-
-            // 触发对话，通过回调显示
-            if (window.game && window.game.uiManager) {
-                const dialogs = this.id === 'kuro' ? this.kuroDialogs : this.shiroDialogs;
-                const randomDialog = dialogs[Math.floor(Math.random() * dialogs.length)];
-                window.game.uiManager.showDialog(this, randomDialog);
-            }
-
-            // 对话冷却时间
-            setTimeout(() => {
-                this.dialogCooldown = false;
-            }, 3000);
+            this.triggerLowHpDialog();
         }
     }
 
@@ -428,12 +481,12 @@ class Cat {
     }
 
     useSkill(target) {
-        if (this.isDead || this.skillCooldown > 0 || this.energy < 50) return null;
+        if (this.isDead || this.isDying || this.skillCooldown > 0 || this.energy < 35) return null;
 
         this.isAttacking = true;
         this.state = 'skill';
         this.skillCooldown = this.skillCooldownMax;
-        this.energy -= 50;
+        this.energy -= 35;
         this.skillScale = 1.0;
 
         if (this.id === 'kuro') {
@@ -583,14 +636,22 @@ class Cat {
         }, 350);
 
         if (this.hp <= 0) {
-            this.die();
+            this.beginDeathAnimation();
+        } else {
+            this.tryHitDialog();
         }
     }
 
-    defend() {
-        if (this.isDead) return;
+    extendDefend() {
+        if (this.isDead || this.isDying) return;
         this.isDefending = true;
         this.state = 'defend';
+        this.defendUntil = Date.now() + 500;
+    }
+
+    defend() {
+        if (this.isDead || this.isDying) return;
+        this.extendDefend();
 
         for (let i = 0; i < 10; i++) {
             this.particles.push(Utils.createParticle(
@@ -599,11 +660,48 @@ class Cat {
                 'defend'
             ));
         }
+    }
 
-        setTimeout(() => {
-            this.isDefending = false;
-            if (!this.isDead) this.state = 'idle';
-        }, 600);
+    beginDeathAnimation() {
+        if (this.isDead || this.isDying) return;
+        this.isDying = true;
+        this.deathAnimComplete = false;
+        this.deathStartTime = Date.now();
+        this.state = 'dying';
+        this.isDefending = false;
+        this.isAttacking = false;
+        this.isHurt = false;
+        this.defendUntil = 0;
+        this.projectiles = [];
+    }
+
+    updateDeathAnimation(deltaTime) {
+        const elapsed = Date.now() - this.deathStartTime;
+        const progress = Math.min(elapsed / this.deathDuration, 1);
+
+        this.animationTime += deltaTime;
+        this.rotation += 0.08;
+        this.alpha = 1 - progress * 0.85;
+        this.scale = Utils.lerp(1, 0.35, progress);
+        this.bounceOffset = progress * 40;
+        this.y = Utils.lerp(this.y, this.targetY + 50, 0.06);
+        this.x = Utils.lerp(this.x, this.targetX, 0.08);
+
+        this.updateParticles(deltaTime);
+
+        if (progress >= 1) {
+            this.finishDeath();
+        }
+    }
+
+    finishDeath() {
+        this.isDying = false;
+        this.deathAnimComplete = true;
+        this.isDead = true;
+        this.state = 'dead';
+        this.alpha = 0.35;
+        this.scale = 0.4;
+        this.rotation = 1.2;
     }
 
     endTurn() {
@@ -627,10 +725,11 @@ class Cat {
     }
 
     die() {
-        this.isDead = true;
-        this.state = 'dead';
-        this.alpha = 0.6;
-        this.scale = 0.7;
+        if (this.isDying) {
+            this.finishDeath();
+            return;
+        }
+        this.beginDeathAnimation();
     }
 
     updateParticles(deltaTime) {
@@ -766,6 +865,9 @@ class Cat {
         const centerY = this.y + this.height / 2 + this.bounceOffset;
 
         ctx.translate(centerX, centerY);
+        if (this.isDying || this.state === 'dying') {
+            ctx.rotate(this.rotation);
+        }
 
         const currentScale = this.scale * this.skillScale;
         let scaleX = currentScale;

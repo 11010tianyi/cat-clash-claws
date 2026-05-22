@@ -15,6 +15,8 @@
 - ✅ 胜利/失败音效
 - ✅ 食物拾取音效
 - ✅ 暗器音效
+- ✅ 对话语音（浏览器 TTS 朗读字幕；不支持时回退到合成音）
+- ✅ 对话音效回退（黑茶 280Hz / 茉莉 480Hz）
 - ✅ 静音功能
 
 ## 使用方法
@@ -36,6 +38,10 @@ audioManager.playVictorySound();  // 胜利
 audioManager.playDefeatSound();  // 失败
 audioManager.playFoodPickupSound();  // 拾取食物
 audioManager.playProjectileSound();  // 暗器
+audioManager.speakDialog('喵~', 'kuro');   // TTS 朗读具体台词
+audioManager.speakDialog('好疼啊！', 'shiro');
+audioManager.playKuroDialogSound();  // 无 TTS 时的回退音
+audioManager.playShiroDialogSound();
 
 // 背景音乐
 audioManager.startBackgroundMusic();

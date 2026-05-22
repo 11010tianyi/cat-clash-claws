@@ -6,6 +6,8 @@ class BattleSystem {
         this.currentRound = 1;
         this.roundWins = { kuro: 0, shiro: 0 };
         this.isBattleActive = false;
+        this.isTransitioningRound = false;
+        this.roundEndTimeout = null;
         this.battleLog = [];
         this.onAttack = null;
         this.onDamage = null;
@@ -23,22 +25,58 @@ class BattleSystem {
     }
 
     init(cats) {
+        this.clearRoundEndTimeout();
         this.cats = cats;
         this.turn = 1;
         this.currentRound = 1;
         this.roundWins = { kuro: 0, shiro: 0 };
         this.isBattleActive = true;
+        this.isTransitioningRound = false;
         this.battleLog = [];
+
+        const game = window.game;
+        const canvasWidth = game?.worldWidth || window.innerWidth;
+        const canvasHeight = game?.worldHeight || window.innerHeight;
 
         this.cats.forEach(cat => {
             cat.hp = cat.maxHp;
             cat.energy = 50;
             cat.isDefending = false;
+            cat.defendUntil = 0;
             cat.isDead = false;
+            cat.isDying = false;
+            cat.deathAnimComplete = false;
+            cat.isAttacking = false;
+            cat.isHurt = false;
             cat.state = 'idle';
-            cat.x = cat.id === 'kuro' ? 150 : 600;
+            cat.scale = 1;
+            cat.alpha = 1;
+            cat.rotation = 0;
+            cat.particles = [];
+            cat.hearts = [];
+            cat.stars = [];
+            cat.projectiles = [];
+            if (typeof cat.resetDialogState === 'function') {
+                cat.resetDialogState();
+            }
+
+            if (cat.id === 'kuro') {
+                cat.x = canvasWidth * 0.12;
+                cat.y = canvasHeight / 2 - 70;
+            } else {
+                cat.x = canvasWidth * 0.88 - cat.width;
+                cat.y = canvasHeight / 2 - 70;
+            }
             cat.targetX = cat.x;
+            cat.targetY = cat.y;
         });
+    }
+
+    clearRoundEndTimeout() {
+        if (this.roundEndTimeout) {
+            clearTimeout(this.roundEndTimeout);
+            this.roundEndTimeout = null;
+        }
     }
 
     processAttack(attacker, defender) {
@@ -75,7 +113,7 @@ class BattleSystem {
 
     processSkill(user, target) {
         if (!this.isBattleActive || user.isDead) return null;
-        if (user.energy < 50) {
+        if (user.energy < 35) {
             this.logAction(`${user.name} 的能量不足，无法使用技能！`);
             return null;
         }
@@ -152,32 +190,44 @@ class BattleSystem {
     }
 
     checkWinCondition() {
-        const aliveCats = this.cats.filter(cat => !cat.isDead);
+        if (this.isTransitioningRound) {
+            return null;
+        }
+
+        if (this.cats.some(cat => cat.isDying)) {
+            return null;
+        }
+
+        const aliveCats = this.cats.filter(cat => cat.hp > 0 && !cat.isDead);
 
         if (aliveCats.length === 1) {
             const winner = aliveCats[0];
             this.roundWins[winner.id]++;
-            
-            this.logAction(`🏆 第 ${this.currentRound} 回合结束：${winner.name} 获胜！`);
+            this.isBattleActive = false;
+
+            this.logAction(`🏆 第 ${this.currentRound} 局结束：${winner.name} 获胜！`);
 
             if (this.onRoundEnd) {
-                this.onRoundEnd(winner, this.currentRound, this.roundWins);
+                this.onRoundEnd(winner, this.currentRound, { ...this.roundWins });
             }
 
             if (this.roundWins[winner.id] >= 2) {
-                this.isBattleActive = false;
                 this.logAction(`🏆🏆🏆 ${winner.name} 以 ${this.roundWins[winner.id]} 胜 ${this.roundWins[winner.id === 'kuro' ? 'shiro' : 'kuro']} 负 赢得了比赛！`);
-                
+
                 if (this.onBattleEnd) {
                     this.onBattleEnd(winner);
                 }
                 return winner;
-            } else {
-                setTimeout(() => {
-                    this.startNextRound();
-                }, 2000);
-                return null;
             }
+
+            this.isTransitioningRound = true;
+            this.clearRoundEndTimeout();
+            this.roundEndTimeout = setTimeout(() => {
+                this.roundEndTimeout = null;
+                this.isTransitioningRound = false;
+                this.startNextRound();
+            }, 2800);
+            return null;
         }
 
         if (aliveCats.length === 0) {
@@ -196,45 +246,55 @@ class BattleSystem {
 
     startNextRound() {
         this.currentRound++;
-        
+
+        const game = window.game;
+        const canvasWidth = game?.worldWidth || window.innerWidth;
+        const canvasHeight = game?.worldHeight || window.innerHeight;
+
         this.cats.forEach(cat => {
             cat.hp = cat.maxHp;
             cat.energy = 50;
             cat.isDefending = false;
+            cat.defendUntil = 0;
             cat.isDead = false;
+            cat.isDying = false;
+            cat.deathAnimComplete = false;
+            cat.isAttacking = false;
             cat.state = 'idle';
             cat.isHurt = false;
             cat.scale = 1;
             cat.alpha = 1;
+            cat.rotation = 0;
             cat.particles = [];
             cat.hearts = [];
             cat.stars = [];
             cat.projectiles = [];
+            if (typeof cat.resetDialogState === 'function') {
+                cat.resetDialogState();
+            }
+
+            if (cat.id === 'kuro') {
+                cat.x = canvasWidth * 0.12;
+                cat.y = canvasHeight / 2 - 70;
+            } else {
+                cat.x = canvasWidth * 0.88 - cat.width;
+                cat.y = canvasHeight / 2 - 70;
+            }
+            cat.targetX = cat.x;
+            cat.targetY = cat.y;
         });
 
-        const canvasWidth = window.innerWidth;
-        const canvasHeight = window.innerHeight;
-        this.cats[0].x = 150;
-        this.cats[0].y = canvasHeight / 2 - 70;
-        this.cats[0].targetX = this.cats[0].x;
-        this.cats[0].targetY = this.cats[0].y;
-        
-        this.cats[1].x = canvasWidth - 290;
-        this.cats[1].y = canvasHeight / 2 - 70;
-        this.cats[1].targetX = this.cats[1].x;
-        this.cats[1].targetY = this.cats[1].y;
-
         this.isBattleActive = true;
-        
-        this.logAction(`=== 第 ${this.currentRound} 回合开始 ===`);
-        
+
+        this.logAction(`=== 第 ${this.currentRound} 局开始（三局两胜）===`);
+
         if (this.onTurnChange) {
             this.onTurnChange(this.currentRound);
         }
     }
 
     getWinner() {
-        const aliveCats = this.cats.filter(cat => !cat.isDead);
+        const aliveCats = this.cats.filter(cat => !cat.isDead && !cat.isDying);
         return aliveCats.length === 1 ? aliveCats[0] : null;
     }
 
@@ -251,11 +311,13 @@ class BattleSystem {
     }
 
     reset() {
+        this.clearRoundEndTimeout();
         this.cats = [];
         this.turn = 1;
         this.currentRound = 1;
         this.roundWins = { kuro: 0, shiro: 0 };
         this.isBattleActive = false;
+        this.isTransitioningRound = false;
         this.battleLog = [];
     }
 }
