@@ -35,6 +35,7 @@ class BattleSystem {
         this.battleLog = [];
 
         const game = window.game;
+        const spawns = game?.getCatSpawnPositions?.() || null;
         const canvasWidth = game?.worldWidth || window.innerWidth;
         const canvasHeight = game?.worldHeight || window.innerHeight;
 
@@ -43,6 +44,7 @@ class BattleSystem {
             cat.energy = 50;
             cat.isDefending = false;
             cat.defendUntil = 0;
+            cat.defendCooldown = 0;
             cat.isDead = false;
             cat.isDying = false;
             cat.deathAnimComplete = false;
@@ -61,11 +63,11 @@ class BattleSystem {
             }
 
             if (cat.id === 'kuro') {
-                cat.x = canvasWidth * 0.12;
-                cat.y = canvasHeight / 2 - 70;
+                cat.x = spawns ? spawns.kuro.x : canvasWidth * 0.12;
+                cat.y = spawns ? spawns.kuro.y : canvasHeight / 2 - 70;
             } else {
-                cat.x = canvasWidth * 0.88 - cat.width;
-                cat.y = canvasHeight / 2 - 70;
+                cat.x = spawns ? spawns.shiro.x : canvasWidth * 0.88 - cat.width;
+                cat.y = spawns ? spawns.shiro.y : canvasHeight / 2 - 70;
             }
             cat.targetX = cat.x;
             cat.targetY = cat.y;
@@ -88,15 +90,16 @@ class BattleSystem {
             if (attackResult.dodged) {
                 this.logAction(`${defender.name} 闪避了 ${attacker.name} 的攻击！`);
             } else if (attackResult.damage > 0) {
-                defender.takeDamage(attackResult.damage, attacker);
+                const actualDamage = defender.takeDamage(attackResult.damage, attacker, { damageKind: 'melee' });
 
                 if (this.onDamage) {
-                    this.onDamage(attacker, defender, attackResult.damage, attackResult.critical || attackResult.backstab, attackResult);
+                    this.onDamage(attacker, defender, actualDamage, attackResult.critical || attackResult.backstab, attackResult);
                 }
 
                 const attackType = attackResult.backstab ? '背刺' : (attackResult.critical ? '暴击' : '');
                 const comboText = attackResult.combo > 1 ? ` [连击x${attackResult.combo}]` : '';
-                this.logAction(`${attacker.name} 攻击了 ${defender.name}，造成了 ${attackResult.damage} 点伤害！${attackType}${comboText}`);
+                const defendNote = actualDamage < attackResult.damage ? '（护盾减免）' : '';
+                this.logAction(`${attacker.name} 攻击了 ${defender.name}，造成了 ${actualDamage} 点伤害！${attackType}${comboText}${defendNote}`);
             } else {
                 this.logAction(`${attacker.name} 的攻击落空了！`);
             }
@@ -122,10 +125,10 @@ class BattleSystem {
 
         if (result) {
             if (result.type === 'damage_heal') {
-                target.takeDamage(result.damage, user);
+                const actualDamage = target.takeDamage(result.damage, user, { damageKind: 'skill' });
 
                 if (this.onDamage) {
-                    this.onDamage(user, target, result.damage, true);
+                    this.onDamage(user, target, actualDamage, true);
                 }
 
                 if (this.onHeal) {
@@ -140,13 +143,13 @@ class BattleSystem {
 
                 this.logAction(`${user.name} 使用了 ${user.skillName}，恢复了 ${result.heal} 点生命！`);
             } else if (result.type === 'damage') {
-                target.takeDamage(result.value, user);
+                const actualDamage = target.takeDamage(result.value, user, { damageKind: 'skill' });
 
                 if (this.onDamage) {
-                    this.onDamage(user, target, result.value, true);
+                    this.onDamage(user, target, actualDamage, true);
                 }
 
-                this.logAction(`${user.name} 使用了 ${user.skillName}，造成了 ${result.value} 点伤害！`);
+                this.logAction(`${user.name} 使用了 ${user.skillName}，造成了 ${actualDamage} 点伤害！`);
             } else if (result.type === 'buff') {
                 this.logAction(`${user.name} 使用了 ${user.skillName}，防御力大幅提升！`);
             }
@@ -163,7 +166,7 @@ class BattleSystem {
         return result;
     }
 
-    processDefend(cat) {
+    processDefend(cat, options = {}) {
         if (!this.isBattleActive || cat.isDead) return;
 
         cat.defend();
@@ -172,7 +175,9 @@ class BattleSystem {
             this.onDefend(cat);
         }
 
-        this.logAction(`${cat.name} 进入防御姿态！`);
+        if (!options.silent) {
+            this.logAction(`${cat.name} 举起护盾格挡暗器！`);
+        }
     }
 
     nextTurn() {
@@ -248,6 +253,7 @@ class BattleSystem {
         this.currentRound++;
 
         const game = window.game;
+        const spawns = game?.getCatSpawnPositions?.() || null;
         const canvasWidth = game?.worldWidth || window.innerWidth;
         const canvasHeight = game?.worldHeight || window.innerHeight;
 
@@ -256,6 +262,7 @@ class BattleSystem {
             cat.energy = 50;
             cat.isDefending = false;
             cat.defendUntil = 0;
+            cat.defendCooldown = 0;
             cat.isDead = false;
             cat.isDying = false;
             cat.deathAnimComplete = false;
@@ -274,11 +281,11 @@ class BattleSystem {
             }
 
             if (cat.id === 'kuro') {
-                cat.x = canvasWidth * 0.12;
-                cat.y = canvasHeight / 2 - 70;
+                cat.x = spawns ? spawns.kuro.x : canvasWidth * 0.12;
+                cat.y = spawns ? spawns.kuro.y : canvasHeight / 2 - 70;
             } else {
-                cat.x = canvasWidth * 0.88 - cat.width;
-                cat.y = canvasHeight / 2 - 70;
+                cat.x = spawns ? spawns.shiro.x : canvasWidth * 0.88 - cat.width;
+                cat.y = spawns ? spawns.shiro.y : canvasHeight / 2 - 70;
             }
             cat.targetX = cat.x;
             cat.targetY = cat.y;

@@ -2,54 +2,95 @@ const MAP_PRESETS = {
     sakura: {
         id: 'sakura',
         label: '🌸 樱花庭院',
-        desc: '标准场地 · 温馨对决',
+        desc: '标准场地 · 樱花盛开',
         scale: 1,
+        photoSrc: 'images/scenes/sakura.jpg',
         skyStops: [
-            [0, '#ffecd2'],
-            [0.3, '#fcb69f'],
-            [0.6, '#e0c3fc'],
+            [0, '#ffeef8'],
+            [0.25, '#ffd4e8'],
+            [0.55, '#e8c4f8'],
+            [0.82, '#b8d4f8'],
             [1, '#8ec5fc']
         ],
-        ground: { top: '#98D8C8', mid: '#7CCD7C', bottom: '#6BBF6B' },
-        obstacles: []
+        ground: { top: '#9AD4A8', mid: '#7CCD7C', bottom: '#5AAF5A' },
+        obstacles: [],
+        scenery: [
+            { kind: 'sakura_tree', x: 0.06, y: 0.52, scale: 1.1 },
+            { kind: 'sakura_tree', x: 0.92, y: 0.5, scale: 1.0, flip: true },
+            { kind: 'sakura_tree', x: 0.14, y: 0.58, scale: 0.75 },
+            { kind: 'sakura_tree', x: 0.86, y: 0.56, scale: 0.85, flip: true },
+            { kind: 'torii', x: 0.5, y: 0.42, scale: 0.9 },
+            { kind: 'stone_lantern', x: 0.22, y: 0.72, scale: 0.7 },
+            { kind: 'stone_lantern', x: 0.78, y: 0.71, scale: 0.75, flip: true },
+            { kind: 'flower_patch', x: 0.35, y: 0.8, scale: 1 },
+            { kind: 'flower_patch', x: 0.65, y: 0.81, scale: 0.9 },
+            { kind: 'bush', x: 0.04, y: 0.74, scale: 0.9 },
+            { kind: 'bush', x: 0.96, y: 0.73, scale: 1, flip: true }
+        ],
+        ambient: { petals: true, clouds: 8, mist: false }
     },
     bamboo: {
         id: 'bamboo',
         label: '🎋 竹海秘境',
-        desc: '更大活动区 · 竹石障碍',
+        desc: '场地 ×2 · 云雾竹海',
         scale: 2,
+        photoSrc: 'images/scenes/bamboo.jpg',
         skyStops: [
-            [0, '#d4fc79'],
-            [0.35, '#96e6a1'],
-            [0.7, '#7dd3a8'],
-            [1, '#4a9f7a']
+            [0, '#e8f8e0'],
+            [0.3, '#b8e8b0'],
+            [0.6, '#7ec89a'],
+            [0.85, '#4a9f7a'],
+            [1, '#2d6b52']
         ],
-        ground: { top: '#7CB87C', mid: '#5A9A5A', bottom: '#3D7A4A' },
-        obstacles: [
-            { x: 0.38, y: 0.38, w: 0.14, h: 0.22, kind: 'bamboo', color: '#2D5A3D' },
-            { x: 0.52, y: 0.45, w: 0.1, h: 0.18, kind: 'rock', color: '#6B7B6E' },
-            { x: 0.44, y: 0.58, w: 0.18, h: 0.12, kind: 'pond', color: '#5BA8C9' }
-        ]
+        ground: { top: '#6BA86B', mid: '#4A8A52', bottom: '#2E6B3A' },
+        obstacles: [],
+        scenery: [
+            { kind: 'bamboo_grove', x: 0.04, y: 0.45, scale: 1.2 },
+            { kind: 'bamboo_grove', x: 0.96, y: 0.44, scale: 1.15, flip: true },
+            { kind: 'bamboo_grove', x: 0.1, y: 0.5, scale: 0.85 },
+            { kind: 'bamboo_grove', x: 0.9, y: 0.48, scale: 0.9, flip: true },
+            { kind: 'mist_band', x: 0.5, y: 0.55, scale: 1.4 },
+            { kind: 'mist_band', x: 0.5, y: 0.38, scale: 1.1 },
+            { kind: 'rock_moss', x: 0.18, y: 0.76, scale: 0.8 },
+            { kind: 'rock_moss', x: 0.82, y: 0.75, scale: 0.85 },
+            { kind: 'fern_patch', x: 0.12, y: 0.82, scale: 1 },
+            { kind: 'fern_patch', x: 0.88, y: 0.81, scale: 1.05, flip: true },
+            { kind: 'pond_edge', x: 0.08, y: 0.7, scale: 0.6 },
+            { kind: 'pond_edge', x: 0.93, y: 0.69, scale: 0.55, flip: true }
+        ],
+        ambient: { petals: false, clouds: 5, mist: true }
     },
     canyon: {
         id: 'canyon',
         label: '🏜️ 峡谷遗迹',
-        desc: '最大空间 · 废墟障碍',
+        desc: '场地 ×3 · 落日峡谷',
         scale: 3,
+        photoSrc: 'images/scenes/canyon.jpg',
         skyStops: [
-            [0, '#f6d365'],
-            [0.4, '#fda085'],
-            [0.75, '#c779d0'],
-            [1, '#4e4376']
+            [0, '#ffe8b8'],
+            [0.35, '#ffb07a'],
+            [0.6, '#e87850'],
+            [0.8, '#9a5a78'],
+            [1, '#3a2a50']
         ],
-        ground: { top: '#C4A574', mid: '#9B7B4F', bottom: '#6B5340' },
-        obstacles: [
-            { x: 0.32, y: 0.4, w: 0.12, h: 0.2, kind: 'pillar', color: '#8B7355' },
-            { x: 0.48, y: 0.42, w: 0.16, h: 0.16, kind: 'rock', color: '#7A6A5A' },
-            { x: 0.58, y: 0.52, w: 0.1, h: 0.24, kind: 'pillar', color: '#6E5C48' },
-            { x: 0.42, y: 0.55, w: 0.2, h: 0.1, kind: 'rubble', color: '#9A8B7A' },
-            { x: 0.5, y: 0.35, w: 0.08, h: 0.15, kind: 'rock', color: '#5C5048' }
-        ]
+        ground: { top: '#D4A86A', mid: '#A67B45', bottom: '#6B4A30' },
+        obstacles: [],
+        scenery: [
+            { kind: 'mesa', x: 0.05, y: 0.48, scale: 1.1 },
+            { kind: 'mesa', x: 0.95, y: 0.46, scale: 1.05, flip: true },
+            { kind: 'mesa', x: 0.12, y: 0.55, scale: 0.7 },
+            { kind: 'mesa', x: 0.88, y: 0.54, scale: 0.75, flip: true },
+            { kind: 'ruin_pillar', x: 0.15, y: 0.62, scale: 0.85 },
+            { kind: 'ruin_pillar', x: 0.85, y: 0.61, scale: 0.9, flip: true },
+            { kind: 'cactus', x: 0.08, y: 0.72, scale: 0.9 },
+            { kind: 'cactus', x: 0.92, y: 0.71, scale: 1, flip: true },
+            { kind: 'cactus', x: 0.2, y: 0.78, scale: 0.65 },
+            { kind: 'sand_dune', x: 0.5, y: 0.85, scale: 1.5 },
+            { kind: 'rock_pile', x: 0.25, y: 0.8, scale: 0.7 },
+            { kind: 'rock_pile', x: 0.75, y: 0.79, scale: 0.75, flip: true },
+            { kind: 'sun_glow', x: 0.72, y: 0.18, scale: 1 }
+        ],
+        ambient: { petals: false, clouds: 4, mist: false }
     }
 };
 

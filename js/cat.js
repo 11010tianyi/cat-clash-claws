@@ -10,6 +10,7 @@ class Cat {
         this.y = config.y;
         this.width = 160;
         this.height = 160;
+        this.layoutScale = 1;
         this.baseSpeed = 5;
 
         // 对话系统（血量低于 70% 时触发）
@@ -42,6 +43,12 @@ class Cat {
 
         this.isDefending = false;
         this.defendUntil = 0;
+        this.defendCooldown = 0;
+        this.defendDuration = 1500;
+        this.defendCooldownMax = 300;
+        this.defendMaxHoldMs = 5000;
+        this.defendStartedAt = 0;
+        this.defendHoldExhausted = false;
         this.isAttacking = false;
         this.isHurt = false;
         this.isDead = false;
@@ -70,6 +77,7 @@ class Cat {
         this.stars = [];
         this.foodItems = [];
         this.projectiles = [];
+        this.skillEffects = [];
 
         this.scale = 1;
         this.skillScale = 1;
@@ -101,6 +109,13 @@ class Cat {
         }
     }
 
+    applyLayoutScale(scale) {
+        this.layoutScale = scale;
+        this.width = Math.round(160 * scale);
+        this.height = Math.round(160 * scale);
+        this.baseSpeed = 5 * scale;
+    }
+
     loadImage() {
         this.image = new Image();
         this.image.onload = () => {
@@ -119,14 +134,6 @@ class Cat {
             return;
         }
         if (this.isDead) return;
-
-        if (this.defendUntil && Date.now() > this.defendUntil) {
-            if (this.isDefending && this.state === 'defend') {
-                this.isDefending = false;
-                this.state = 'idle';
-            }
-            this.defendUntil = 0;
-        }
 
         this.animationTime += deltaTime;
         this.breathPhase += deltaTime * 0.003;
@@ -177,6 +184,14 @@ class Cat {
 
         this.updateParticles(deltaTime);
         this.updateProjectiles(deltaTime);
+        this.updateSkillEffects(deltaTime);
+
+        if (this.isDefending && this.defendStartedAt > 0) {
+            if (Date.now() - this.defendStartedAt >= this.defendMaxHoldMs) {
+                this.defendHoldExhausted = true;
+                this.releaseDefend();
+            }
+        }
 
         if (this.energy < this.maxEnergy) {
             this.energy = Math.min(this.maxEnergy, this.energy + 0.15);
@@ -300,8 +315,42 @@ class Cat {
         }
     }
 
+    isSkillAnimating() {
+        return this.state === 'skill' || this.skillCooldown > this.skillCooldownMax - 45;
+    }
+
+    isAttackAnimating() {
+        return this.isAttacking && this.state === 'attack' && this.attackCooldown > this.attackCooldownMax - 12;
+    }
+
+    isBusyWithCombatAction() {
+        return this.isAttacking && (this.state === 'attack' || this.state === 'skill');
+    }
+
+    canStartAction(action) {
+        if (this.isDead || this.isDying) return false;
+
+        if (action === 'defend') {
+            return !this.isBusyWithCombatAction() && !this.isSkillAnimating();
+        }
+        if (action === 'attack') {
+            return !this.isDefending && !this.isSkillAnimating() && this.attackCooldown <= 0 && !this.isAttackAnimating();
+        }
+        if (action === 'skill') {
+            return !this.isDefending && !this.isBusyWithCombatAction() && this.skillCooldown <= 0;
+        }
+        if (action === 'projectile') {
+            return !this.isDefending && !this.isBusyWithCombatAction() && !this.isSkillAnimating() && !this.isAttackAnimating();
+        }
+        return true;
+    }
+
     attackTarget(target) {
-        if (this.isDead || this.attackCooldown > 0) return null;
+        if (!this.canStartAction('attack')) return null;
+
+        const targetCenterX = target.x + target.width / 2;
+        const catCenterX = this.x + this.width / 2;
+        this.direction = targetCenterX >= catCenterX ? 'right' : 'left';
 
         this.isAttacking = true;
         this.state = 'attack';
@@ -331,7 +380,8 @@ class Cat {
             target.y + target.height / 2
         );
 
-        if (distance < 220) {
+        const meleeRange = 220 * this.layoutScale;
+        if (distance < meleeRange) {
             const attackResult = this.calculateAttackResult(this, target);
             this.energy = Math.min(this.maxEnergy, this.energy + 3);
             return attackResult;
@@ -349,7 +399,7 @@ class Cat {
         const targetY = target.y + target.height / 2;
 
         const angle = Math.atan2(targetY - startY, targetX - startX);
-        const speed = 8;
+        const speed = 9 * this.layoutScale;
 
         if (this.id === 'kuro') {
             this.projectiles.push({
@@ -399,18 +449,36 @@ class Cat {
         });
     }
 
-    checkProjectileHits(target, canvas) {
+    checkProjectileHits(target, worldWidth, worldHeight) {
         const hits = [];
+        const hitRadius = 55 * this.layoutScale;
+        const margin = 80;
 
         this.projectiles = this.projectiles.filter(proj => {
             const dist = Utils.distance(proj.x, proj.y, target.x + target.width / 2, target.y + target.height / 2);
 
-            if (dist < 60 && proj.targetId === target.id) {
-                hits.push({ damage: proj.damage, x: proj.x, y: proj.y });
+            if (dist < hitRadius && proj.targetId === target.id) {
+                if (target.isDefending) {
+                    hits.push({
+                        blocked: true,
+                        x: proj.x,
+                        y: proj.y,
+                        type: proj.type,
+                        color: proj.color,
+                        rotation: proj.rotation
+                    });
+                } else {
+                    hits.push({ damage: proj.damage, x: proj.x, y: proj.y });
+                }
                 return false;
             }
 
-            if (proj.x < 0 || proj.x > canvas.width || proj.y < 0 || proj.y > canvas.height) {
+            if (
+                proj.x < -margin ||
+                proj.x > worldWidth + margin ||
+                proj.y < -margin ||
+                proj.y > worldHeight + margin
+            ) {
                 return false;
             }
 
@@ -455,7 +523,7 @@ class Cat {
         combo = attacker.combo;
 
         const baseDamage = attacker.attack * (0.8 + Math.random() * 0.2);
-        let damage = baseDamage - target.defense * (target.isDefending ? 2 : 1);
+        let damage = baseDamage - target.defense;
 
         if (isBackstab) {
             damage *= attacker.backstabBonus;
@@ -481,7 +549,11 @@ class Cat {
     }
 
     useSkill(target) {
-        if (this.isDead || this.isDying || this.skillCooldown > 0 || this.energy < 35) return null;
+        if (!this.canStartAction('skill') || this.energy < 35) return null;
+
+        const targetCenterX = target.x + target.width / 2;
+        const catCenterX = this.x + this.width / 2;
+        this.direction = targetCenterX >= catCenterX ? 'right' : 'left';
 
         this.isAttacking = true;
         this.state = 'skill';
@@ -489,34 +561,36 @@ class Cat {
         this.energy -= 35;
         this.skillScale = 1.0;
 
+        const startX = this.x + this.width / 2;
+        const startY = this.y + this.height / 3;
+        const endX = target.x + target.width / 2;
+        const endY = target.y + target.height / 3;
+
         if (this.id === 'kuro') {
-            for (let i = 0; i < 25; i++) {
-                setTimeout(() => {
-                    for (let j = 0; j < 2; j++) {
-                        this.particles.push({
-                            x: this.x + this.width / 2 + Utils.randomRange(-60, 60),
-                            y: this.y + this.height / 2 + Utils.randomRange(-60, 60),
-                            vx: Utils.randomRange(-3, 3),
-                            vy: Utils.randomRange(-3, 3),
-                            size: Utils.randomRange(8, 15),
-                            life: 1,
-                            color: `rgba(${75 + Math.random() * 50}, 0, ${130 + Math.random() * 50}, 1)`,
-                            type: 'shadow'
-                        });
-                    }
-                }, i * 25);
+            this.skillEffects.push({
+                type: 'poop_throw',
+                startX,
+                startY,
+                endX,
+                endY,
+                x: startX,
+                y: startY,
+                t: 0,
+                life: 1,
+                impact: false
+            });
+            for (let i = 0; i < 8; i++) {
+                this.particles.push(Utils.createParticle(startX, startY, 'attack'));
             }
         } else {
-            for (let i = 0; i < 15; i++) {
-                this.hearts.push({
-                    x: this.x + this.width / 2 + Utils.randomRange(-50, 50),
-                    y: this.y - 30 + i * 5,
-                    size: Utils.randomRange(20, 35),
-                    alpha: 1,
-                    vy: -1.5 - Math.random() * 0.5,
-                    life: 1
-                });
-            }
+            this.skillEffects.push({
+                type: 'paw_slap',
+                x: endX,
+                y: endY,
+                phase: 0,
+                life: 1,
+                scale: 0.3
+            });
         }
 
         setTimeout(() => {
@@ -525,25 +599,6 @@ class Cat {
         }, 700);
 
         if (this.id === 'shiro') {
-            this.defense *= 1.5;
-            setTimeout(() => {
-                this.defense /= 1.5;
-            }, 3000);
-
-            const healAmount = Math.floor(this.maxHp * 0.15);
-            this.hp = Math.min(this.maxHp, this.hp + healAmount);
-
-            for (let i = 0; i < 10; i++) {
-                this.hearts.push({
-                    x: this.x + this.width / 2 + Utils.randomRange(-30, 30),
-                    y: this.y + this.height / 2,
-                    size: Utils.randomRange(15, 22),
-                    alpha: 1,
-                    vy: -1.5,
-                    life: 1
-                });
-            }
-
             const distance = Utils.distance(
                 this.x + this.width / 2,
                 this.y + this.height / 2,
@@ -551,12 +606,13 @@ class Cat {
                 target.y + target.height / 2
             );
 
-            if (distance < 250) {
+            const skillRange = 280 * this.layoutScale;
+            if (distance < skillRange) {
                 const damage = this.calculateDamage(this.attack * this.skillDamage, target, true);
-                return { type: 'damage_heal', damage: damage, heal: healAmount };
+                return { type: 'damage', value: damage };
             }
 
-            return { type: 'heal_only', heal: healAmount };
+            return { type: 'miss' };
         }
 
         const distance = Utils.distance(
@@ -566,7 +622,8 @@ class Cat {
             target.y + target.height / 2
         );
 
-        if (distance < 280) {
+        const skillRange = 280 * this.layoutScale;
+        if (distance < skillRange) {
             const damage = this.calculateDamage(this.attack * this.skillDamage, target, true);
             return { type: 'damage', value: damage };
         }
@@ -576,7 +633,7 @@ class Cat {
 
     calculateDamage(attackPower, target, isCritical = false) {
         const baseDamage = attackPower * (0.8 + Math.random() * 0.2);
-        let damage = baseDamage - target.defense * (target.isDefending ? 0.5 : 1);
+        let damage = baseDamage - target.defense;
 
         if (isCritical) {
             damage *= 1.35;
@@ -585,7 +642,32 @@ class Cat {
         return Math.max(1, Math.floor(damage));
     }
 
-    takeDamage(amount, attacker) {
+    mitigateDamageWhileDefending(amount, damageKind = 'melee') {
+        if (!this.isDefending || amount <= 0 || damageKind === 'projectile') {
+            return { finalDamage: amount, mitigated: 0 };
+        }
+
+        const blockRatio = 0.12 + Math.random() * 0.28;
+        const mitigated = Math.max(0, Math.floor(amount * blockRatio));
+        const finalDamage = Math.max(0, amount - mitigated);
+
+        return { finalDamage, mitigated };
+    }
+
+    takeDamage(amount, attacker, options = {}) {
+        const damageKind = options.damageKind || 'melee';
+        let mitigated = 0;
+
+        if (this.isDefending && amount > 0) {
+            const mitigation = this.mitigateDamageWhileDefending(amount, damageKind);
+            amount = mitigation.finalDamage;
+            mitigated = mitigation.mitigated;
+
+            if (mitigated > 0 && typeof audioManager !== 'undefined') {
+                audioManager.playPunchingBagBlockSound();
+            }
+        }
+
         this.hp = Math.max(0, this.hp - amount);
         this.isHurt = true;
         this.scale = 0.85;
@@ -640,20 +722,20 @@ class Cat {
         } else {
             this.tryHitDialog();
         }
-    }
 
-    extendDefend() {
-        if (this.isDead || this.isDying) return;
-        this.isDefending = true;
-        this.state = 'defend';
-        this.defendUntil = Date.now() + 500;
+        return amount;
     }
 
     defend() {
-        if (this.isDead || this.isDying) return;
-        this.extendDefend();
+        if (this.defendHoldExhausted) return;
+        if (!this.canStartAction('defend')) return;
+        if (this.isDefending) return;
 
-        for (let i = 0; i < 10; i++) {
+        this.isDefending = true;
+        this.defendStartedAt = Date.now();
+        this.state = 'defend';
+
+        for (let i = 0; i < 6; i++) {
             this.particles.push(Utils.createParticle(
                 this.x + this.width / 2 + Utils.randomRange(-30, 30),
                 this.y + this.height / 2 + Utils.randomRange(-30, 30),
@@ -662,16 +744,124 @@ class Cat {
         }
     }
 
+    releaseDefend() {
+        if (!this.isDefending) return;
+        this.isDefending = false;
+        this.defendStartedAt = 0;
+        if (this.state === 'defend') {
+            this.state = 'idle';
+        }
+    }
+
+    updateSkillEffects(deltaTime) {
+        const dt = deltaTime * 0.001;
+        this.skillEffects = this.skillEffects.filter(fx => {
+            fx.life -= dt * 1.2;
+
+            if (fx.type === 'poop_throw') {
+                fx.t = Math.min(1, fx.t + dt * 2.8);
+                fx.x = Utils.lerp(fx.startX, fx.endX, fx.t);
+                fx.y = Utils.lerp(fx.startY, fx.endY, fx.t) - Math.sin(fx.t * Math.PI) * 90 * this.layoutScale;
+                if (fx.t >= 1 && !fx.impact) {
+                    fx.impact = true;
+                    for (let i = 0; i < 12; i++) {
+                        this.particles.push({
+                            x: fx.endX + Utils.randomRange(-25, 25),
+                            y: fx.endY + Utils.randomRange(-15, 15),
+                            vx: Utils.randomRange(-2, 2),
+                            vy: Utils.randomRange(0.5, 3),
+                            size: Utils.randomRange(6, 12),
+                            life: 1,
+                            color: '#6B4423'
+                        });
+                    }
+                }
+            }
+
+            if (fx.type === 'paw_slap') {
+                fx.phase += dt * 5;
+                fx.scale = Math.min(1.4, 0.3 + fx.phase * 1.1);
+            }
+
+            return fx.life > 0;
+        });
+    }
+
+    drawSkillEffects(ctx) {
+        this.skillEffects.forEach(fx => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, fx.life);
+
+            if (fx.type === 'poop_throw') {
+                const size = fx.impact ? 52 : 36 + fx.t * 12;
+                ctx.font = `${size}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('💩', fx.x, fx.y);
+            }
+
+            if (fx.type === 'paw_slap') {
+                const pawX = fx.x;
+                const pawY = fx.y;
+                const s = fx.scale * 28;
+                const alpha = Math.max(0, 1 - fx.phase * 0.35);
+
+                ctx.globalAlpha *= alpha;
+                ctx.fillStyle = 'rgba(255, 220, 200, 0.95)';
+                ctx.strokeStyle = 'rgba(180, 120, 90, 0.9)';
+                ctx.lineWidth = 3;
+
+                const pads = [
+                    { dx: 0, dy: -s * 0.35, r: s * 0.55 },
+                    { dx: -s * 0.45, dy: s * 0.15, r: s * 0.32 },
+                    { dx: s * 0.45, dy: s * 0.15, r: s * 0.32 },
+                    { dx: -s * 0.28, dy: s * 0.55, r: s * 0.28 },
+                    { dx: s * 0.28, dy: s * 0.55, r: s * 0.28 }
+                ];
+
+                pads.forEach(p => {
+                    ctx.beginPath();
+                    ctx.ellipse(pawX + p.dx, pawY + p.dy, p.r, p.r * 1.1, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                });
+
+                ctx.strokeStyle = 'rgba(255, 100, 100, 0.7)';
+                ctx.lineWidth = 5;
+                for (let i = 0; i < 4; i++) {
+                    const angle = (i / 4) * Math.PI * 2 + fx.phase;
+                    ctx.beginPath();
+                    ctx.moveTo(pawX, pawY);
+                    ctx.lineTo(pawX + Math.cos(angle) * s * 1.2, pawY + Math.sin(angle) * s * 1.2);
+                    ctx.stroke();
+                }
+
+                ctx.font = `${s * 1.1}px serif`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('🐾', pawX, pawY - s * 0.9);
+            }
+
+            ctx.restore();
+        });
+    }
+
     beginDeathAnimation() {
         if (this.isDead || this.isDying) return;
         this.isDying = true;
         this.deathAnimComplete = false;
         this.deathStartTime = Date.now();
         this.state = 'dying';
+        if (typeof audioManager !== 'undefined') {
+            audioManager.playDeathSound();
+        }
         this.isDefending = false;
+        this.defendStartedAt = 0;
+        this.defendHoldExhausted = false;
         this.isAttacking = false;
         this.isHurt = false;
         this.defendUntil = 0;
+        this.defendCooldown = 0;
         this.projectiles = [];
     }
 
@@ -706,6 +896,7 @@ class Cat {
 
     endTurn() {
         this.isDefending = false;
+        this.defendUntil = 0;
         this.energy = Math.min(this.maxEnergy, this.energy + 5);
     }
 
@@ -871,7 +1062,7 @@ class Cat {
 
         const currentScale = this.scale * this.skillScale;
         let scaleX = currentScale;
-        if (this.style === 'photo') {
+        if (this.style === 'photo' && this.image && this.imageLoaded) {
             if (this.id === 'kuro') {
                 scaleX = this.direction === 'left' ? currentScale : -currentScale;
             } else {
@@ -879,6 +1070,9 @@ class Cat {
             }
         } else {
             scaleX = this.direction === 'left' ? -currentScale : currentScale;
+            if (this.state === 'move') {
+                ctx.rotate(this.direction === 'left' ? -0.06 : 0.06);
+            }
         }
 
         ctx.scale(scaleX, currentScale);
@@ -894,10 +1088,58 @@ class Cat {
         }
 
         this.drawEffects(ctx);
+        this.drawMeleeSkillGesture(ctx);
 
         ctx.restore();
 
-        this.drawProjectiles(ctx);
+        this.drawSkillEffects(ctx);
+    }
+
+    drawMeleeSkillGesture(ctx) {
+        const inSkill = this.state === 'skill' || this.skillCooldown > this.skillCooldownMax - 40;
+        if (!inSkill) return;
+
+        const progress = Utils.clamp(
+            (this.skillCooldownMax - this.skillCooldown) / 40,
+            0,
+            1
+        );
+        const facing = this.direction === 'left' ? -1 : 1;
+
+        if (this.id === 'kuro') {
+            const tossX = facing * (28 + progress * 52);
+            const tossY = -12 + progress * 18;
+            ctx.save();
+            ctx.font = `${Math.round(22 + progress * 26)}px serif`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText('💩', tossX, tossY);
+            ctx.restore();
+        } else {
+            const pawX = facing * (38 + progress * 28);
+            const pawY = -8 + progress * 10;
+            const s = 0.55 + progress * 0.65;
+            ctx.save();
+            ctx.translate(pawX, pawY);
+            ctx.scale(s, s);
+            ctx.fillStyle = 'rgba(255, 230, 210, 0.95)';
+            ctx.strokeStyle = 'rgba(200, 140, 100, 0.9)';
+            ctx.lineWidth = 3;
+            [
+                [0, -14, 16],
+                [-16, 4, 10],
+                [16, 4, 10]
+            ].forEach(([dx, dy, r]) => {
+                ctx.beginPath();
+                ctx.ellipse(dx, dy, r, r * 1.1, 0, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+            });
+            ctx.font = '28px serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('🐾', 0, -28);
+            ctx.restore();
+        }
     }
 
     drawImageBody(ctx) {
@@ -915,57 +1157,6 @@ class Cat {
             w,
             h
         );
-
-        if (this.state === 'skill' || this.skillCooldown > this.skillCooldownMax - 30) {
-            const skillProgress = Math.min(1, (this.skillCooldownMax - this.skillCooldown) / 30);
-            let stretchScale = 1 + Math.sin(skillProgress * Math.PI) * 1;
-
-            if (this.id === 'kuro') {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(75, 0, 130, 0.8)';
-                ctx.lineWidth = 12;
-                ctx.lineCap = 'round';
-
-                const handStartX = -35;
-                const handStartY = -5;
-
-                ctx.beginPath();
-                ctx.moveTo(handStartX, handStartY);
-                ctx.lineTo(handStartX - 50 * stretchScale, handStartY + 20 * stretchScale);
-                ctx.stroke();
-
-                ctx.strokeStyle = 'rgba(162, 155, 254, 0.6)';
-                ctx.lineWidth = 18;
-                ctx.beginPath();
-                ctx.moveTo(handStartX, handStartY);
-                ctx.lineTo(handStartX - 50 * stretchScale, handStartY + 20 * stretchScale);
-                ctx.stroke();
-
-                ctx.restore();
-            } else if (this.id === 'shiro') {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(255, 215, 0, 0.8)';
-                ctx.lineWidth = 12;
-                ctx.lineCap = 'round';
-
-                const handStartX = 35;
-                const handStartY = -5;
-
-                ctx.beginPath();
-                ctx.moveTo(handStartX, handStartY);
-                ctx.lineTo(handStartX + 50 * stretchScale, handStartY + 20 * stretchScale);
-                ctx.stroke();
-
-                ctx.strokeStyle = 'rgba(255, 255, 200, 0.6)';
-                ctx.lineWidth = 18;
-                ctx.beginPath();
-                ctx.moveTo(handStartX, handStartY);
-                ctx.lineTo(handStartX + 50 * stretchScale, handStartY + 20 * stretchScale);
-                ctx.stroke();
-
-                ctx.restore();
-            }
-        }
 
         ctx.restore();
     }
@@ -1332,13 +1523,15 @@ class Cat {
     }
 
     drawProjectiles(ctx) {
+        const scale = this.layoutScale || 1;
+
         this.projectiles.forEach(proj => {
             proj.trail.forEach((t, i) => {
                 ctx.save();
                 ctx.globalAlpha = t.alpha * 0.6;
                 ctx.fillStyle = proj.color;
                 ctx.beginPath();
-                ctx.arc(t.x, t.y, 5 - i * 0.35, 0, Math.PI * 2);
+                ctx.arc(t.x, t.y, (5 - i * 0.35) * scale, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.restore();
             });
@@ -1347,22 +1540,22 @@ class Cat {
             ctx.translate(proj.x, proj.y);
             ctx.rotate(proj.rotation);
             ctx.shadowColor = proj.color;
-            ctx.shadowBlur = 20;
+            ctx.shadowBlur = 20 * scale;
 
             if (proj.type === 'shuriken') {
-                this.drawShuriken(ctx);
+                this.drawShuriken(ctx, scale);
             } else {
-                this.drawGoldenStar(ctx);
+                this.drawGoldenStar(ctx, scale);
             }
 
             ctx.restore();
         });
     }
 
-    drawShuriken(ctx) {
+    drawShuriken(ctx, scale = 1) {
         const points = 4;
-        const outerRadius = 14;
-        const innerRadius = 5;
+        const outerRadius = 14 * scale;
+        const innerRadius = 5 * scale;
 
         ctx.beginPath();
         for (let i = 0; i < points * 2; i++) {
@@ -1382,15 +1575,15 @@ class Cat {
         ctx.fill();
 
         ctx.beginPath();
-        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.arc(0, 0, 3 * scale, 0, Math.PI * 2);
         ctx.fillStyle = '#1a1a1a';
         ctx.fill();
     }
 
-    drawGoldenStar(ctx) {
+    drawGoldenStar(ctx, scale = 1) {
         const points = 5;
-        const outerRadius = 12;
-        const innerRadius = 5;
+        const outerRadius = 12 * scale;
+        const innerRadius = 5 * scale;
 
         ctx.beginPath();
         for (let i = 0; i < points * 2; i++) {
@@ -1410,7 +1603,7 @@ class Cat {
         ctx.fill();
 
         ctx.beginPath();
-        ctx.arc(0, 0, 3, 0, Math.PI * 2);
+        ctx.arc(0, 0, 3 * scale, 0, Math.PI * 2);
         ctx.fillStyle = '#FFF8DC';
         ctx.fill();
     }

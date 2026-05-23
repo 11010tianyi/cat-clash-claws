@@ -169,6 +169,11 @@ class CatAI {
     performDefend(aiCat) {
         if (!aiCat.isDead && !aiCat.isDefending) {
             game.defendCat('shiro');
+            setTimeout(() => {
+                if (!aiCat.isDead) {
+                    aiCat.releaseDefend();
+                }
+            }, 600 + Math.random() * 500);
         }
     }
 

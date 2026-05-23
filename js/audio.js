@@ -141,6 +141,22 @@ class AudioManager {
         }, 100);
     }
 
+    /** 双方同时防御 — 亲亲 */
+    playKissSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        this.playNote(420, 0.05, 'sine', 0.22);
+        setTimeout(() => {
+            this.playNote(310, 0.07, 'triangle', 0.2);
+        }, 40);
+        setTimeout(() => {
+            this.playNote(580, 0.04, 'sine', 0.16);
+        }, 85);
+        setTimeout(() => {
+            this.playNote(490, 0.06, 'triangle', 0.12);
+        }, 130);
+    }
+
     playSkillSound() {
         if (!this.isInitialized || this.isMuted) return;
 
@@ -234,6 +250,31 @@ class AudioManager {
                 this.playNote(freq, 0.4, 'sawtooth', 0.25);
             }, i * 200);
         });
+    }
+
+    playDeathSound() {
+        if (!this.isInitialized || this.isMuted) return;
+
+        this.playNote(220, 0.35, 'sine', 0.22);
+        this.playNote(165, 0.45, 'triangle', 0.18);
+
+        setTimeout(() => {
+            this.playNote(140, 0.55, 'sine', 0.2);
+            this.playNote(110, 0.5, 'triangle', 0.14);
+        }, 180);
+
+        setTimeout(() => {
+            this.playNote(90, 0.7, 'sine', 0.16);
+            this.playNote(70, 0.65, 'triangle', 0.1);
+        }, 420);
+
+        setTimeout(() => {
+            this.playNote(55, 0.9, 'sine', 0.08);
+        }, 720);
+
+        setTimeout(() => {
+            this.playNote(40, 1.1, 'triangle', 0.05);
+        }, 1100);
     }
 
     playFoodPickupSound() {

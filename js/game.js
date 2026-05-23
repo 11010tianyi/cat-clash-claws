@@ -22,7 +22,6 @@ class CatClashGame {
                 'KeyA': () => this.moveCat('kuro', -1, 0, true),
                 'KeyD': () => this.moveCat('kuro', 1, 0, true),
                 'KeyJ': () => this.attackCat('kuro'),
-                'KeyK': () => this.defendCat('kuro'),
                 'KeyL': () => this.skillCat('kuro'),
                 'KeyU': () => this.fireProjectileCat('kuro')
             },
@@ -32,7 +31,6 @@ class CatClashGame {
                 'ArrowLeft': () => this.moveCat('shiro', -1, 0, true),
                 'ArrowRight': () => this.moveCat('shiro', 1, 0, true),
                 'Numpad1': () => this.attackCat('shiro'),
-                'Numpad2': () => this.defendCat('shiro'),
                 'Numpad3': () => this.skillCat('shiro'),
                 'Numpad0': () => this.fireProjectileCat('shiro')
             }
@@ -46,6 +44,9 @@ class CatClashGame {
         this.foodSpawnTimer = 0;
         this.foodSpawnInterval = 5000;
         this.heartsEffect = null;
+        this.blockedProjectileDebris = [];
+        this.defendKeyMap = { kuro: 'KeyK', shiro: 'Numpad2' };
+        this.touchDefendHeld = { kuro: false, shiro: false };
         
         this.touchControls = {
             kuro: { up: false, down: false, left: false, right: false },
@@ -74,11 +75,16 @@ class CatClashGame {
         this.FAST_MOVE_MIN_ENERGY = 3;
 
         this.selectedMap = 'sakura';
+        this.sceneBackgroundMode = 'painted';
         this.worldWidth = window.innerWidth;
         this.worldHeight = window.innerHeight;
+        this.renderScale = 1;
         this.camera = { x: 0, y: 0 };
         this.obstacles = [];
         this.pendingRoundCheck = false;
+        this.sceneryRenderer = new SceneryRenderer();
+        this.sceneImages = {};
+        this.sceneImagesLoaded = {};
 
         this.directionKeyMap = {
             kuro: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
@@ -107,8 +113,11 @@ class CatClashGame {
         this.setupStyleButtons();
         this.setupTouchModeButtons();
         this.setupMapButtons();
+        this.setupSceneButtons();
+        this.preloadSceneImages();
         this.setupTouchControls();
         this.updateTouchControlsVisibility();
+        this.updateCatPreview();
         this.showMenu();
     }
 
@@ -116,15 +125,40 @@ class CatClashGame {
         return MAP_PRESETS[this.selectedMap] || MAP_PRESETS.sakura;
     }
 
-    applyMapLayout() {
-        const preset = this.getMapPreset();
+    getLayoutMetrics() {
         const vw = window.innerWidth;
         const vh = window.innerHeight;
-        // 画布与世界同尺寸，大地图通过出生点与障碍布局体现，避免猫在屏外
-        this.worldWidth = vw;
-        this.worldHeight = vh;
+        const shortSide = Math.min(vw, vh);
+        const uiScale = Utils.clamp(shortSide / 820, 0.52, 1.2);
+        const isMobile = vw <= 768 || ('ontouchstart' in window && shortSide < 900);
+        return {
+            vw,
+            vh,
+            uiScale,
+            catSize: Math.round(160 * uiScale),
+            isMobile
+        };
+    }
+
+    applyMapLayout() {
+        const preset = this.getMapPreset();
+        const metrics = this.getLayoutMetrics();
+        const vw = metrics.vw;
+        const vh = metrics.vh;
+        const scale = preset.scale;
+        this.layoutMetrics = metrics;
+
+        document.documentElement.style.setProperty('--ui-scale', String(metrics.uiScale));
+        document.documentElement.style.setProperty(
+            '--hud-pad',
+            metrics.isMobile ? '8px' : '20px'
+        );
+        // 逻辑世界随地图放大，渲染时同步缩小以保持在视口内
+        this.worldWidth = vw * scale;
+        this.worldHeight = vh * scale;
         this.mapPreset = preset;
-        this.mapScale = preset.scale;
+        this.mapScale = scale;
+        this.renderScale = 1 / scale;
         this.camera = { x: 0, y: 0 };
 
         if (this.canvas) {
@@ -132,7 +166,7 @@ class CatClashGame {
             this.canvas.height = vh;
         }
 
-        this.obstacles = preset.obstacles.map((o, i) => ({
+        this.obstacles = (preset.obstacles || []).map((o, i) => ({
             id: i,
             x: o.x * this.worldWidth,
             y: o.y * this.worldHeight,
@@ -141,6 +175,105 @@ class CatClashGame {
             kind: o.kind,
             color: o.color
         }));
+
+        this.refreshAmbientForMap(preset);
+        this.ensureSceneImageLoaded(this.selectedMap);
+    }
+
+    preloadSceneImages() {
+        Object.keys(MAP_PRESETS).forEach(mapId => {
+            this.ensureSceneImageLoaded(mapId);
+        });
+    }
+
+    ensureSceneImageLoaded(mapId) {
+        const preset = MAP_PRESETS[mapId];
+        if (!preset?.photoSrc || this.sceneImages[mapId]) return;
+
+        const img = new Image();
+        img.onload = () => {
+            this.sceneImagesLoaded[mapId] = true;
+        };
+        img.onerror = () => {
+            this.sceneImagesLoaded[mapId] = false;
+        };
+        img.src = preset.photoSrc;
+        this.sceneImages[mapId] = img;
+    }
+
+    refreshAmbientForMap(preset) {
+        const ambient = preset.ambient || { petals: true, clouds: 8, mist: false };
+        this.backgroundElements.petals = [];
+        if (ambient.petals) {
+            for (let i = 0; i < 30; i++) {
+                this.backgroundElements.petals.push({
+                    x: Math.random() * window.innerWidth,
+                    y: Math.random() * window.innerHeight,
+                    size: 10 + Math.random() * 12,
+                    speedY: 0.4 + Math.random() * 1.2,
+                    speedX: -0.6 + Math.random() * 1.2,
+                    rotation: Math.random() * Math.PI * 2,
+                    rotationSpeed: 0.015 + Math.random() * 0.035,
+                    wobble: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        const targetClouds = ambient.clouds ?? 8;
+        while (this.backgroundElements.clouds.length < targetClouds) {
+            this.backgroundElements.clouds.push({
+                x: Math.random() * window.innerWidth,
+                y: 50 + Math.random() * 150,
+                width: 120 + Math.random() * 120,
+                height: 50 + Math.random() * 40,
+                speed: 0.15 + Math.random() * 0.25,
+                opacity: 0.25 + Math.random() * 0.35
+            });
+        }
+        this.backgroundElements.clouds.length = targetClouds;
+        this.mapAmbientMist = ambient.mist;
+    }
+
+    setupSceneButtons() {
+        const menuButtons = document.querySelectorAll('.scene-btn');
+        menuButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.setSceneBackgroundMode(btn.dataset.scene);
+            });
+        });
+
+        const battlePainted = document.getElementById('battle-scene-painted');
+        const battlePhoto = document.getElementById('battle-scene-photo');
+        if (battlePainted) {
+            battlePainted.addEventListener('click', () => this.setSceneBackgroundMode('painted'));
+        }
+        if (battlePhoto) {
+            battlePhoto.addEventListener('click', () => this.setSceneBackgroundMode('photo'));
+        }
+
+        this.setSceneBackgroundMode(this.sceneBackgroundMode, true);
+    }
+
+    setSceneBackgroundMode(mode, silent = false) {
+        this.sceneBackgroundMode = mode === 'photo' ? 'photo' : 'painted';
+
+        document.querySelectorAll('.scene-btn').forEach(btn => {
+            btn.classList.toggle('selected', btn.dataset.scene === this.sceneBackgroundMode);
+        });
+
+        const battlePainted = document.getElementById('battle-scene-painted');
+        const battlePhoto = document.getElementById('battle-scene-photo');
+        if (battlePainted) {
+            battlePainted.classList.toggle('active', this.sceneBackgroundMode === 'painted');
+        }
+        if (battlePhoto) {
+            battlePhoto.classList.toggle('active', this.sceneBackgroundMode === 'photo');
+        }
+
+        if (!silent && this.uiManager) {
+            const label = this.sceneBackgroundMode === 'photo' ? '真实场景' : '手绘场景';
+            this.uiManager.showMessage(`已切换为${label}`, 1200);
+        }
     }
 
     resizeCanvas() {
@@ -154,6 +287,7 @@ class CatClashGame {
                 buttons.forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.selectedMap = btn.dataset.map;
+                this.applyMapLayout();
             });
         });
         const defaultBtn = document.querySelector('.map-btn[data-map="sakura"]');
@@ -169,9 +303,9 @@ class CatClashGame {
         const scale = this.mapScale || 1;
         const w = this.worldWidth;
         const h = this.worldHeight;
-        const catW = 160;
-        const edge = scale === 1 ? 0.12 : scale === 2 ? 0.08 : 0.05;
-        const y = h * 0.5 - 70;
+        const catW = this.layoutMetrics?.catSize || 160;
+        const edge = scale === 1 ? 0.12 : scale === 2 ? 0.08 : 0.06;
+        const y = h * 0.5 - catW * 0.45;
         return {
             kuro: { x: w * edge, y },
             shiro: { x: w * (1 - edge) - catW, y }
@@ -270,6 +404,7 @@ class CatClashGame {
         document.addEventListener('keyup', (e) => {
             this.keys[e.code] = false;
             this.handleDirectionKeyUp(e.code);
+            this.handleDefendKeyUp(e.code);
         });
     }
 
@@ -283,6 +418,111 @@ class CatClashGame {
                 state.direction = null;
             }
         }
+    }
+
+    handleTouchDirectionRelease(catId, direction) {
+        const state = this.fastMoveState[catId];
+        if (!state?.active || state.direction !== direction) return;
+        state.active = false;
+        state.direction = null;
+    }
+
+    bindTouchMoveButton(selector, catId, { dir, dx, dy }, options = {}) {
+        const btn = document.querySelector(selector);
+        if (!btn) return;
+
+        const resolveCatId = () => (options.useActivePlayer ? this.currentTouchPlayer : catId);
+        let pressedCatId = null;
+
+        const onStart = (e) => {
+            e.preventDefault();
+            pressedCatId = resolveCatId();
+            this.touchControls[pressedCatId][dir] = true;
+            this.moveCat(pressedCatId, dx, dy, true);
+        };
+
+        const onEnd = (e) => {
+            e.preventDefault();
+            const activeCatId = pressedCatId || resolveCatId();
+            this.touchControls[activeCatId][dir] = false;
+            this.handleTouchDirectionRelease(activeCatId, dir);
+            pressedCatId = null;
+        };
+
+        btn.addEventListener('touchstart', onStart, { passive: false });
+        btn.addEventListener('touchend', onEnd, { passive: false });
+        btn.addEventListener('touchcancel', onEnd, { passive: false });
+        btn.addEventListener('mousedown', onStart);
+        btn.addEventListener('mouseup', onEnd);
+        btn.addEventListener('mouseleave', onEnd);
+    }
+
+    bindTouchTapButton(selector, onTap) {
+        const btn = document.querySelector(selector);
+        if (!btn) return;
+
+        const fire = (e) => {
+            e.preventDefault();
+            onTap();
+        };
+
+        btn.addEventListener('touchstart', fire, { passive: false });
+        btn.addEventListener('mousedown', fire);
+    }
+
+    handleDefendKeyUp(code) {
+        for (const catId of ['kuro', 'shiro']) {
+            if (this.defendKeyMap[catId] === code) {
+                const cat = this.cats.find(c => c.id === catId);
+                if (cat) cat.releaseDefend();
+            }
+        }
+    }
+
+    bindTouchDefendHold(selector, catId, options = {}) {
+        const btn = document.querySelector(selector);
+        if (!btn) return;
+        const resolveCatId = () => (options.useActivePlayer ? this.currentTouchPlayer : catId);
+        let pressedCatId = null;
+        const setDefend = (active) => {
+            if (active) {
+                pressedCatId = resolveCatId();
+                this.touchDefendHeld[pressedCatId] = true;
+            } else {
+                const activeCatId = pressedCatId || resolveCatId();
+                this.touchDefendHeld[activeCatId] = false;
+                pressedCatId = null;
+            }
+        };
+        btn.addEventListener('touchstart', (e) => { e.preventDefault(); setDefend(true); });
+        btn.addEventListener('touchend', (e) => { e.preventDefault(); setDefend(false); });
+        btn.addEventListener('touchcancel', (e) => { e.preventDefault(); setDefend(false); });
+        btn.addEventListener('mousedown', () => setDefend(true));
+        btn.addEventListener('mouseup', () => setDefend(false));
+        btn.addEventListener('mouseleave', () => setDefend(false));
+    }
+
+    updateDefendHold() {
+        if (this.state !== 'battle') return;
+
+        ['kuro', 'shiro'].forEach(catId => {
+            if (catId === 'shiro' && this.gameMode === 'ai') return;
+
+            const cat = this.cats.find(c => c.id === catId);
+            if (!cat || cat.isDead) return;
+
+            const keyHeld = this.keys[this.defendKeyMap[catId]] || this.touchDefendHeld[catId];
+            if (keyHeld) {
+                if (!cat.isDefending && !cat.defendHoldExhausted) {
+                    this.defendCat(catId, { silent: true });
+                }
+            } else {
+                cat.defendHoldExhausted = false;
+                if (cat.isDefending) {
+                    cat.releaseDefend();
+                }
+            }
+        });
     }
 
     isDirectionHeld(catId, direction) {
@@ -342,8 +582,11 @@ class CatClashGame {
             });
         });
         
-        if (document.querySelector('.style-btn.cartoon')) {
-            document.querySelector('.style-btn.cartoon').classList.add('selected');
+        const defaultStyleBtn = document.querySelector('.style-btn.photo') || document.querySelector('.style-btn.cartoon');
+        if (defaultStyleBtn) {
+            defaultStyleBtn.classList.add('selected');
+            this.characterStyle = defaultStyleBtn.dataset.style || 'photo';
+            this.updateCatPreview();
         }
     }
 
@@ -405,159 +648,55 @@ class CatClashGame {
                 touchTabs.forEach(t => t.classList.remove('active'));
                 tab.classList.add('active');
                 this.currentTouchPlayer = tab.dataset.player;
+                ['kuro', 'shiro'].forEach((id) => {
+                    this.touchControls[id] = { up: false, down: false, left: false, right: false };
+                    this.touchDefendHeld[id] = false;
+                });
             });
         });
 
-        const moveButtons = {
-            'move-up': { dir: 'up', dx: 0, dy: -1 },
-            'move-down': { dir: 'down', dx: 0, dy: 1 },
-            'move-left': { dir: 'left', dx: -1, dy: 0 },
-            'move-right': { dir: 'right', dx: 1, dy: 0 }
-        };
+        const singleMoves = [
+            { selector: '.touch-btn.move-up', dir: 'up', dx: 0, dy: -1 },
+            { selector: '.touch-btn.move-down', dir: 'down', dx: 0, dy: 1 },
+            { selector: '.touch-btn.move-left', dir: 'left', dx: -1, dy: 0 },
+            { selector: '.touch-btn.move-right', dir: 'right', dx: 1, dy: 0 }
+        ];
 
-        Object.keys(moveButtons).forEach(id => {
-            const btn = document.querySelector(`.touch-btn.${id}`);
-            if (btn) {
-                const setButtonState = (active) => {
-                    this.touchControls[this.currentTouchPlayer][moveButtons[id].dir] = active;
-                };
-                
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    setButtonState(true);
-                });
-                btn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    setButtonState(false);
-                });
-                btn.addEventListener('touchcancel', (e) => {
-                    e.preventDefault();
-                    setButtonState(false);
-                });
-                btn.addEventListener('mousedown', () => setButtonState(true));
-                btn.addEventListener('mouseup', () => setButtonState(false));
-                btn.addEventListener('mouseleave', () => setButtonState(false));
-            }
+        singleMoves.forEach(({ selector, dir, dx, dy }) => {
+            this.bindTouchMoveButton(selector, 'kuro', { dir, dx, dy }, { useActivePlayer: true });
         });
 
-        const actionButtons = {
-            'attack-btn': () => this.attackCat(this.currentTouchPlayer),
-            'defend-btn': () => this.defendCat(this.currentTouchPlayer),
-            'skill-btn': () => this.skillCat(this.currentTouchPlayer)
-        };
-
-        Object.keys(actionButtons).forEach(id => {
-            const btn = document.querySelector(`.touch-btn.${id}`);
-            if (btn) {
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    actionButtons[id]();
-                });
-                btn.addEventListener('mousedown', actionButtons[id]);
-            }
-        });
+        this.bindTouchTapButton('.touch-btn.attack-btn', () => this.attackCat(this.currentTouchPlayer));
+        this.bindTouchTapButton('.touch-btn.skill-btn', () => this.skillCat(this.currentTouchPlayer));
+        this.bindTouchDefendHold('.touch-btn.defend-btn', 'kuro', { useActivePlayer: true });
 
         this.setupTwoPlayerTouchControls();
     }
 
     setupTwoPlayerTouchControls() {
-        const p1MoveButtons = {
-            'move-up-p1': { dir: 'up', dx: 0, dy: -1 },
-            'move-down-p1': { dir: 'down', dx: 0, dy: 1 },
-            'move-left-p1': { dir: 'left', dx: -1, dy: 0 },
-            'move-right-p1': { dir: 'right', dx: 1, dy: 0 }
-        };
+        const p1Moves = [
+            { selector: '.touch-btn.move-up-p1', dir: 'up', dx: 0, dy: -1 },
+            { selector: '.touch-btn.move-down-p1', dir: 'down', dx: 0, dy: 1 },
+            { selector: '.touch-btn.move-left-p1', dir: 'left', dx: -1, dy: 0 },
+            { selector: '.touch-btn.move-right-p1', dir: 'right', dx: 1, dy: 0 }
+        ];
+        p1Moves.forEach((cfg) => this.bindTouchMoveButton(cfg.selector, 'kuro', cfg));
 
-        Object.keys(p1MoveButtons).forEach(id => {
-            const btn = document.querySelector(`.touch-btn.${id}`);
-            if (btn) {
-                const setButtonState = (active) => {
-                    this.touchControls.kuro[p1MoveButtons[id].dir] = active;
-                };
-                
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    setButtonState(true);
-                });
-                btn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    setButtonState(false);
-                });
-                btn.addEventListener('touchcancel', (e) => {
-                    e.preventDefault();
-                    setButtonState(false);
-                });
-                btn.addEventListener('mousedown', () => setButtonState(true));
-                btn.addEventListener('mouseup', () => setButtonState(false));
-                btn.addEventListener('mouseleave', () => setButtonState(false));
-            }
-        });
+        const p2Moves = [
+            { selector: '.touch-btn.move-up-p2', dir: 'up', dx: 0, dy: -1 },
+            { selector: '.touch-btn.move-down-p2', dir: 'down', dx: 0, dy: 1 },
+            { selector: '.touch-btn.move-left-p2', dir: 'left', dx: -1, dy: 0 },
+            { selector: '.touch-btn.move-right-p2', dir: 'right', dx: 1, dy: 0 }
+        ];
+        p2Moves.forEach((cfg) => this.bindTouchMoveButton(cfg.selector, 'shiro', cfg));
 
-        const p2MoveButtons = {
-            'move-up-p2': { dir: 'up', dx: 0, dy: -1 },
-            'move-down-p2': { dir: 'down', dx: 0, dy: 1 },
-            'move-left-p2': { dir: 'left', dx: -1, dy: 0 },
-            'move-right-p2': { dir: 'right', dx: 1, dy: 0 }
-        };
+        this.bindTouchTapButton('.touch-btn.attack-btn-p1', () => this.attackCat('kuro'));
+        this.bindTouchTapButton('.touch-btn.skill-btn-p1', () => this.skillCat('kuro'));
+        this.bindTouchTapButton('.touch-btn.attack-btn-p2', () => this.attackCat('shiro'));
+        this.bindTouchTapButton('.touch-btn.skill-btn-p2', () => this.skillCat('shiro'));
 
-        Object.keys(p2MoveButtons).forEach(id => {
-            const btn = document.querySelector(`.touch-btn.${id}`);
-            if (btn) {
-                const setButtonState = (active) => {
-                    this.touchControls.shiro[p2MoveButtons[id].dir] = active;
-                };
-                
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    setButtonState(true);
-                });
-                btn.addEventListener('touchend', (e) => {
-                    e.preventDefault();
-                    setButtonState(false);
-                });
-                btn.addEventListener('touchcancel', (e) => {
-                    e.preventDefault();
-                    setButtonState(false);
-                });
-                btn.addEventListener('mousedown', () => setButtonState(true));
-                btn.addEventListener('mouseup', () => setButtonState(false));
-                btn.addEventListener('mouseleave', () => setButtonState(false));
-            }
-        });
-
-        const p1ActionButtons = {
-            'attack-btn-p1': () => this.attackCat('kuro'),
-            'defend-btn-p1': () => this.defendCat('kuro'),
-            'skill-btn-p1': () => this.skillCat('kuro')
-        };
-
-        Object.keys(p1ActionButtons).forEach(id => {
-            const btn = document.querySelector(`.touch-btn.${id}`);
-            if (btn) {
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    p1ActionButtons[id]();
-                });
-                btn.addEventListener('mousedown', p1ActionButtons[id]);
-            }
-        });
-
-        const p2ActionButtons = {
-            'attack-btn-p2': () => this.attackCat('shiro'),
-            'defend-btn-p2': () => this.defendCat('shiro'),
-            'skill-btn-p2': () => this.skillCat('shiro')
-        };
-
-        Object.keys(p2ActionButtons).forEach(id => {
-            const btn = document.querySelector(`.touch-btn.${id}`);
-            if (btn) {
-                btn.addEventListener('touchstart', (e) => {
-                    e.preventDefault();
-                    p2ActionButtons[id]();
-                });
-                btn.addEventListener('mousedown', p2ActionButtons[id]);
-            }
-        });
+        this.bindTouchDefendHold('.touch-btn.defend-btn-p1', 'kuro');
+        this.bindTouchDefendHold('.touch-btn.defend-btn-p2', 'shiro');
     }
 
     updateCatPreview() {
@@ -633,6 +772,7 @@ class CatClashGame {
     start() {
         this.state = 'battle';
         this.uiManager.showScreen('battle');
+        this.setSceneBackgroundMode(this.sceneBackgroundMode, true);
 
         this.initBattle();
 
@@ -682,13 +822,19 @@ class CatClashGame {
 
         this.resetBattleRuntimeState();
 
-        const kuro = new KuroCat(canvasWidth * 0.12, canvasHeight / 2 - 70, 'right', this.characterStyle);
-        const shiro = new ShiroCat(canvasWidth * 0.88 - 160, canvasHeight / 2 - 70, 'left', this.characterStyle);
+        const spawns = this.getCatSpawnPositions();
+        const layoutScale = this.layoutMetrics?.uiScale || 1;
+        const kuro = new KuroCat(spawns.kuro.x, spawns.kuro.y, 'right', this.characterStyle);
+        const shiro = new ShiroCat(spawns.shiro.x, spawns.shiro.y, 'left', this.characterStyle);
+        kuro.applyLayoutScale(layoutScale);
+        shiro.applyLayoutScale(layoutScale);
 
         this.cats = [kuro, shiro];
         this.foodItems = [];
         this.foodSpawnTimer = 0;
         this.heartsEffect = null;
+        this.blockedProjectileDebris = [];
+        this.touchDefendHeld = { kuro: false, shiro: false };
         this.touchControls = {
             kuro: { up: false, down: false, left: false, right: false },
             shiro: { up: false, down: false, left: false, right: false }
@@ -712,10 +858,6 @@ class CatClashGame {
         };
 
         this.battleSystem.onDamage = (attacker, defender, damage, isCritical, attackResult) => {
-            if (defender.isDefending && damage > 0) {
-                audioManager.playPunchingBagBlockSound();
-            }
-
             this.uiManager.updateHP(defender);
             this.uiManager.showDamage(defender, damage, isCritical, attackResult);
             
@@ -998,9 +1140,11 @@ class CatClashGame {
 
                     // 造成伤害
                     const damage = 6 + Math.floor(Math.random() * 10);
-                    otherCat.takeDamage(damage, cat);
-                    audioManager.playHitSound();
-                    this.uiManager.showDamage(otherCat, damage, false, null);
+                    const actualDamage = otherCat.takeDamage(damage, cat, { damageKind: 'melee' });
+                    if (actualDamage > 0) {
+                        audioManager.playHitSound();
+                    }
+                    this.uiManager.showDamage(otherCat, actualDamage, false, null);
                     this.uiManager.updateHP(otherCat);
                 }
             }
@@ -1024,8 +1168,9 @@ class CatClashGame {
         const attacker = this.cats.find(c => c.id === catId);
         const defender = this.cats.find(c => c.id !== catId);
 
-        if (!attacker || !defender || attacker.isDead) return;
+        if (!attacker || !defender || attacker.isDead || !attacker.canStartAction('attack')) return;
 
+        this.faceTarget(attacker, defender);
         audioManager.playAttackSound();
 
         const damage = this.battleSystem.processAttack(attacker, defender);
@@ -1037,13 +1182,24 @@ class CatClashGame {
         }
     }
 
-    defendCat(catId) {
+    faceTarget(cat, target) {
+        if (!cat || !target) return;
+        const catCenterX = cat.x + cat.width / 2;
+        const targetCenterX = target.x + target.width / 2;
+        cat.direction = targetCenterX >= catCenterX ? 'right' : 'left';
+    }
+
+    defendCat(catId, options = {}) {
         const cat = this.cats.find(c => c.id === catId);
         if (!cat || cat.isDead) return;
+        if (!cat.isDefending && !cat.canStartAction('defend')) return;
 
-        audioManager.playDefendSound();
-
-        this.battleSystem.processDefend(cat);
+        if (!cat.isDefending) {
+            if (!options.silent) {
+                audioManager.playDefendSound();
+            }
+            this.battleSystem.processDefend(cat);
+        }
 
         // 检查是否两个猫都在防御
         const kuro = this.cats.find(c => c.id === 'kuro');
@@ -1053,6 +1209,7 @@ class CatClashGame {
                 startTime: Date.now(),
                 duration: 1500
             };
+            audioManager.playKissSound();
         }
     }
 
@@ -1060,7 +1217,7 @@ class CatClashGame {
         const attacker = this.cats.find(c => c.id === catId);
         const target = this.cats.find(c => c.id !== catId);
 
-        if (!attacker || !target || attacker.isDead) return;
+        if (!attacker || !target || attacker.isDead || !attacker.canStartAction('projectile')) return;
 
         audioManager.playProjectileSound();
         attacker.fireProjectile(target);
@@ -1070,8 +1227,9 @@ class CatClashGame {
         const user = this.cats.find(c => c.id === catId);
         const target = this.cats.find(c => c.id !== catId);
 
-        if (!user || !target || user.isDead) return;
+        if (!user || !target || user.isDead || !user.canStartAction('skill')) return;
 
+        this.faceTarget(user, target);
         audioManager.playSkillSound();
 
         const result = this.battleSystem.processSkill(user, target);
@@ -1131,8 +1289,9 @@ class CatClashGame {
             }
         }
 
-        this.updateDefendHold();
         this.handleKeyHold();
+        this.updateDefendHold();
+        this.updateBlockedProjectileDebris(deltaTime);
         this.updateCamera();
 
         this.checkCollision();
@@ -1147,24 +1306,6 @@ class CatClashGame {
         this.uiManager.updateHP(this.cats.find(c => c.id === 'shiro'));
         this.uiManager.updateEnergy(this.cats.find(c => c.id === 'kuro'));
         this.uiManager.updateEnergy(this.cats.find(c => c.id === 'shiro'));
-    }
-
-    updateDefendHold() {
-        if (this.state !== 'battle') return;
-
-        const kuro = this.cats.find(c => c.id === 'kuro');
-        const shiro = this.cats.find(c => c.id === 'shiro');
-
-        if (kuro && !kuro.isDead && !kuro.isDying) {
-            if (this.keys['KeyK']) {
-                kuro.extendDefend();
-            }
-        }
-        if (shiro && !shiro.isDead && !shiro.isDying && this.gameMode === 'local') {
-            if (this.keys['Numpad2']) {
-                shiro.extendDefend();
-            }
-        }
     }
 
     handleKeyHold() {
@@ -1188,7 +1329,7 @@ class CatClashGame {
             }
         }
 
-        if (shiro && !shiro.isDead && this.gameMode === 'local') {
+        if (shiro && !shiro.isDead && this.gameMode !== 'ai') {
             if (!this.applyFastMoveHold('shiro', shiro)) {
             const ms = this.NORMAL_MOVE_SPEED;
             if (this.keys['ArrowUp']) this.moveCat('shiro', 0, -ms);
@@ -1403,22 +1544,141 @@ class CatClashGame {
         }
     }
 
+    spawnBlockedProjectileDebris(hit) {
+        const groundY = this.worldHeight * 0.78;
+        const count = hit.type === 'shuriken' ? 1 : 1;
+        for (let i = 0; i < count; i++) {
+            this.blockedProjectileDebris.push({
+                x: hit.x + Utils.randomRange(-8, 8),
+                y: hit.y,
+                vy: 0.5 + Math.random() * 1.2,
+                vx: Utils.randomRange(-1.5, 1.5),
+                rotation: hit.rotation || 0,
+                spin: hit.type === 'shuriken' ? 0.25 : 0.15,
+                type: hit.type,
+                color: hit.color,
+                life: 1,
+                groundY,
+                settled: false,
+                bounce: 0
+            });
+        }
+        for (let i = 0; i < 6; i++) {
+            this.blockedProjectileDebris.push({
+                x: hit.x + Utils.randomRange(-20, 20),
+                y: hit.y + Utils.randomRange(-10, 10),
+                vy: Utils.randomRange(-2, 1),
+                vx: Utils.randomRange(-2, 2),
+                rotation: 0,
+                spin: 0,
+                type: 'spark',
+                color: 'rgba(162, 155, 254, 0.9)',
+                life: 0.6 + Math.random() * 0.3,
+                groundY,
+                settled: false,
+                size: Utils.randomRange(3, 7)
+            });
+        }
+    }
+
+    updateBlockedProjectileDebris(deltaTime) {
+        const dt = deltaTime * 0.001;
+        this.blockedProjectileDebris = this.blockedProjectileDebris.filter(d => {
+            d.life -= dt * (d.type === 'spark' ? 2.2 : 0.35);
+            if (d.type === 'spark') {
+                d.x += d.vx;
+                d.y += d.vy;
+                d.vy += 0.12;
+                return d.life > 0;
+            }
+
+            if (!d.settled) {
+                d.x += d.vx;
+                d.y += d.vy;
+                d.vy += 0.35;
+                d.rotation += d.spin;
+                if (d.y >= d.groundY) {
+                    d.y = d.groundY;
+                    d.settled = true;
+                    d.bounce = 2;
+                    d.vy = 0;
+                    d.vx *= 0.3;
+                }
+            } else if (d.bounce > 0) {
+                d.y = d.groundY - Math.sin((3 - d.bounce) * Math.PI) * 8;
+                d.bounce -= dt * 4;
+            }
+            return d.life > 0;
+        });
+    }
+
+    renderBlockedProjectileDebris(ctx) {
+        this.blockedProjectileDebris.forEach(d => {
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, Math.min(1, d.life));
+
+            if (d.type === 'spark') {
+                ctx.fillStyle = d.color;
+                ctx.beginPath();
+                ctx.arc(d.x, d.y, d.size || 4, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+                return;
+            }
+
+            ctx.translate(d.x, d.y);
+            ctx.rotate(d.rotation);
+            ctx.globalAlpha *= 0.85;
+
+            if (d.type === 'shuriken') {
+                ctx.fillStyle = '#4B0082';
+                ctx.beginPath();
+                for (let i = 0; i < 4; i++) {
+                    const angle = (i * Math.PI) / 2;
+                    const r = i % 2 === 0 ? 10 : 4;
+                    const px = Math.cos(angle) * r;
+                    const py = Math.sin(angle) * r;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                ctx.fillStyle = '#FFD700';
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
+                    const r = i % 2 === 0 ? 9 : 4;
+                    const px = Math.cos(angle) * r;
+                    const py = Math.sin(angle) * r;
+                    if (i === 0) ctx.moveTo(px, py);
+                    else ctx.lineTo(px, py);
+                }
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            ctx.restore();
+        });
+    }
+
     checkProjectileCollisions() {
         for (let i = 0; i < this.cats.length; i++) {
             const attacker = this.cats[i];
             const defender = this.cats[(i + 1) % this.cats.length];
 
-            const hits = attacker.checkProjectileHits(defender, this.canvas);
+            const hits = attacker.checkProjectileHits(defender, this.worldWidth, this.worldHeight);
             hits.forEach(hit => {
-                let finalDamage = hit.damage;
-                if (defender.isDefending) {
+                if (hit.blocked) {
                     audioManager.playShieldBlockProjectileSound();
-                    finalDamage = Math.max(0, Math.floor(hit.damage * 0.35));
-                } else {
-                    audioManager.playHitSound();
+                    this.spawnBlockedProjectileDebris(hit);
+                    this.uiManager.showMessage('格挡！', 500);
+                    return;
                 }
-                defender.takeDamage(finalDamage, attacker);
-                this.uiManager.showDamage(defender, finalDamage, false, null);
+
+                audioManager.playHitSound();
+                defender.takeDamage(hit.damage, attacker);
+                this.uiManager.showDamage(defender, hit.damage, false, null);
                 this.uiManager.updateHP(defender);
             });
         }
@@ -1427,20 +1687,94 @@ class CatClashGame {
     render() {
         if (!this.ctx) return;
 
-        this.renderBackground();
-        this.renderClouds();
-        this.renderPetals();
+        const preset = this.mapPreset || MAP_PRESETS.sakura;
+        const usePhoto = this.sceneBackgroundMode === 'photo' &&
+            this.sceneImagesLoaded[this.selectedMap];
+
+        if (usePhoto) {
+            this.renderPhotoBackground(preset);
+        } else {
+            this.renderBackground();
+            this.renderClouds();
+            this.renderPetals();
+            if (this.mapAmbientMist) {
+                this.renderAmbientMist();
+            }
+        }
 
         this.ctx.save();
+        this.ctx.scale(this.renderScale || 1, this.renderScale || 1);
         this.ctx.translate(-this.camera.x, -this.camera.y);
-        this.renderWorldGround();
-        this.renderObstacles();
+
+        if (usePhoto) {
+            this.renderPhotoGroundOverlay(preset);
+        } else {
+            this.renderWorldGround();
+            this.sceneryRenderer.drawAll(
+                this.ctx,
+                preset,
+                this.worldWidth,
+                this.worldHeight,
+                this.lastTime
+            );
+        }
+
         this.renderRushTrails();
         this.renderFood();
         this.renderCats();
+        this.renderAllProjectiles();
+        this.renderBlockedProjectileDebris(this.ctx);
         this.ctx.restore();
 
         this.renderHeartsEffect();
+    }
+
+    renderPhotoBackground(preset) {
+        const img = this.sceneImages[this.selectedMap];
+        if (!img || !img.complete) {
+            this.renderBackground();
+            return;
+        }
+
+        const iw = img.naturalWidth || img.width;
+        const ih = img.naturalHeight || img.height;
+        const scale = Math.max(this.canvas.width / iw, this.canvas.height / ih);
+        const dw = iw * scale;
+        const dh = ih * scale;
+        const dx = (this.canvas.width - dw) / 2;
+        const dy = (this.canvas.height - dh) / 2;
+
+        this.ctx.drawImage(img, dx, dy, dw, dh);
+
+        const shade = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);
+        shade.addColorStop(0, 'rgba(0,0,0,0.08)');
+        shade.addColorStop(0.55, 'rgba(0,0,0,0)');
+        shade.addColorStop(1, 'rgba(0,0,0,0.35)');
+        this.ctx.fillStyle = shade;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    }
+
+    renderPhotoGroundOverlay(preset) {
+        const groundY = this.worldHeight * 0.78;
+        const grad = this.ctx.createLinearGradient(0, groundY - 40, 0, this.worldHeight);
+        grad.addColorStop(0, 'rgba(0,0,0,0)');
+        grad.addColorStop(0.35, 'rgba(30,40,30,0.25)');
+        grad.addColorStop(1, 'rgba(20,30,20,0.55)');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, groundY - 40, this.worldWidth, this.worldHeight - groundY + 40);
+    }
+
+    renderAmbientMist() {
+        const t = this.lastTime * 0.0003;
+        for (let i = 0; i < 3; i++) {
+            const y = this.canvas.height * (0.35 + i * 0.12) + Math.sin(t + i) * 15;
+            const grad = this.ctx.createLinearGradient(0, y - 40, 0, y + 40);
+            grad.addColorStop(0, 'rgba(255,255,255,0)');
+            grad.addColorStop(0.5, 'rgba(255,255,255,0.22)');
+            grad.addColorStop(1, 'rgba(255,255,255,0)');
+            this.ctx.fillStyle = grad;
+            this.ctx.fillRect(0, y - 40, this.canvas.width, 80);
+        }
     }
 
     renderObstacles() {
@@ -1556,51 +1890,77 @@ class CatClashGame {
     renderWorldGround() {
         const preset = this.mapPreset || MAP_PRESETS.sakura;
         const groundY = this.worldHeight * 0.78;
-        
-        const groundGradient = this.ctx.createLinearGradient(0, groundY, 0, this.worldHeight);
+        const t = Date.now() * 0.001;
+
+        const groundGradient = this.ctx.createLinearGradient(0, groundY - 30, 0, this.worldHeight);
         groundGradient.addColorStop(0, preset.ground.top);
-        groundGradient.addColorStop(0.3, preset.ground.mid);
+        groundGradient.addColorStop(0.25, preset.ground.mid);
         groundGradient.addColorStop(1, preset.ground.bottom);
 
         this.ctx.fillStyle = groundGradient;
         this.ctx.beginPath();
         this.ctx.moveTo(0, groundY);
-        
-        for (let x = 0; x <= this.worldWidth; x += 40) {
-            const waveY = Math.sin(x * 0.015 + Date.now() * 0.001) * 6;
+
+        for (let x = 0; x <= this.worldWidth; x += 28) {
+            const waveY = Math.sin(x * 0.012 + t) * 8 + Math.sin(x * 0.03 + t * 1.3) * 3;
             this.ctx.lineTo(x, groundY + waveY);
         }
-        
+
         this.ctx.lineTo(this.worldWidth, this.worldHeight);
         this.ctx.lineTo(0, this.worldHeight);
         this.ctx.closePath();
         this.ctx.fill();
 
-        const grassColor = preset.id === 'canyon' ? 'rgba(160, 140, 100, 0.45)' : 'rgba(144, 238, 144, 0.4)';
-        this.ctx.fillStyle = grassColor;
-        for (let i = 0; i < Math.ceil(this.worldWidth / 90); i++) {
-            const x = i * 90 + 30;
-            const baseY = groundY + 15 + (i % 3) * 15;
-            const height = 20 + Math.sin(i) * 8;
-            
+        this.ctx.strokeStyle = 'rgba(255,255,255,0.12)';
+        this.ctx.lineWidth = 2;
+        this.ctx.beginPath();
+        for (let x = 0; x <= this.worldWidth; x += 28) {
+            const waveY = Math.sin(x * 0.012 + t) * 8;
+            if (x === 0) this.ctx.moveTo(x, groundY + waveY);
+            else this.ctx.lineTo(x, groundY + waveY);
+        }
+        this.ctx.stroke();
+
+        const grassSets = {
+            sakura: { color: 'rgba(120, 200, 120, 0.55)', accent: 'rgba(255, 182, 193, 0.5)' },
+            bamboo: { color: 'rgba(80, 160, 90, 0.5)', accent: 'rgba(180, 220, 160, 0.4)' },
+            canyon: { color: 'rgba(180, 150, 100, 0.5)', accent: 'rgba(220, 180, 120, 0.35)' }
+        };
+        const grass = grassSets[preset.id] || grassSets.sakura;
+
+        this.ctx.fillStyle = grass.color;
+        const grassStep = preset.scale > 1 ? 55 : 70;
+        for (let i = 0; i < Math.ceil(this.worldWidth / grassStep); i++) {
+            const x = i * grassStep + (i % 2) * 20;
+            const baseY = groundY + 12 + (i % 4) * 10;
+            const height = 22 + Math.sin(i * 0.7) * 10;
+
             this.ctx.beginPath();
             this.ctx.moveTo(x, baseY);
-            this.ctx.lineTo(x - 6, baseY - height);
-            this.ctx.lineTo(x, baseY - height + 5);
-            this.ctx.lineTo(x + 6, baseY - height);
+            this.ctx.lineTo(x - 7, baseY - height);
+            this.ctx.lineTo(x, baseY - height + 6);
+            this.ctx.lineTo(x + 7, baseY - height);
             this.ctx.closePath();
             this.ctx.fill();
         }
-        
+
         if (preset.id === 'sakura') {
-            for (let i = 0; i < Math.ceil(this.worldWidth / 120); i++) {
-                const x = i * 120 + 60;
-                const baseY = groundY + 25;
-                const height = 15 + Math.cos(i) * 5;
-                
-                this.ctx.fillStyle = 'rgba(255, 182, 193, 0.6)';
+            this.ctx.fillStyle = grass.accent;
+            for (let i = 0; i < Math.ceil(this.worldWidth / 100); i++) {
+                const x = i * 100 + 40;
+                const baseY = groundY + 20;
                 this.ctx.beginPath();
-                this.ctx.ellipse(x, baseY - height / 2, 8, height / 2, 0, 0, Math.PI * 2);
+                this.ctx.ellipse(x, baseY, 10, 6, 0, 0, Math.PI * 2);
+                this.ctx.fill();
+            }
+        }
+
+        if (preset.id === 'canyon') {
+            this.ctx.fillStyle = 'rgba(160, 130, 90, 0.25)';
+            for (let i = 0; i < Math.ceil(this.worldWidth / 80); i++) {
+                const x = i * 80 + 20;
+                this.ctx.beginPath();
+                this.ctx.ellipse(x, groundY + 35, 25, 8, 0, 0, Math.PI * 2);
                 this.ctx.fill();
             }
         }
@@ -1661,6 +2021,12 @@ class CatClashGame {
     renderCats() {
         this.cats.forEach(cat => {
             cat.draw(this.ctx);
+        });
+    }
+
+    renderAllProjectiles() {
+        this.cats.forEach(cat => {
+            cat.drawProjectiles(this.ctx);
         });
     }
 }
