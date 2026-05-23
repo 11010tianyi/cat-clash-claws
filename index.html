@@ -2,7 +2,7 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>猫猫对战 ✨ Cat Clash Claws</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -175,11 +175,11 @@
                 <div class="controls-hint">
                     <div class="hint-section">
                         <h4>🖤 黑茶操作</h4>
-                        <p>W A S D 移动 | J 攻击 | K 防御 | L 技能</p>
+                        <p>W A S D 移动 | J 攻击 | U 暗器 | K 防御 | L 技能</p>
                     </div>
                     <div class="hint-section shiro-hint">
                         <h4>🤍 茉莉操作</h4>
-                        <p>↑ ↓ ← → 移动 | 小键盘1 攻击 | 小键盘2 防御 | 小键盘3 技能</p>
+                        <p>↑ ↓ ← → 移动 | 小键盘1 攻击 | 小键盘0 暗器 | 小键盘2 防御 | 小键盘3 技能</p>
                     </div>
                 </div>
                 
@@ -327,6 +327,90 @@
             
             <!-- 消息提示 -->
             <div class="battle-message" id="battle-message"></div>
+
+            <button type="button" class="battle-help-btn" id="battle-help-btn" title="游戏规则" aria-label="游戏规则帮助">?</button>
+
+            <div class="battle-help-modal" id="battle-help-modal" aria-hidden="true">
+                <div class="battle-help-backdrop" id="battle-help-backdrop"></div>
+                <div class="battle-help-panel" role="dialog" aria-labelledby="battle-help-title">
+                    <button type="button" class="battle-help-close" id="battle-help-close" aria-label="关闭">×</button>
+                    <h2 class="battle-help-title" id="battle-help-title">📖 游戏规则</h2>
+                    <div class="battle-help-body">
+                        <section>
+                            <h3>胜利条件</h3>
+                            <p>三局两胜。先把对方生命值打到 0 并赢下当前小局的一方得分；先拿到 2 局胜利者赢得整场比赛。</p>
+                        </section>
+                        <section>
+                            <h3>🖤 黑茶（玩家1 / 人机模式由你操控）</h3>
+                            <ul>
+                                <li><strong>移动</strong>：W A S D（触屏：左下角方向键）</li>
+                                <li><strong>攻击 J</strong>：近距离挥爪；距离远时 J 也会自动发射暗器</li>
+                                <li><strong>暗器 U</strong>：无论远近，直接向对手发射暗器（黑茶=手里剑，茉莉=金星）</li>
+                                <li><strong>防御 K</strong>：举盾（触屏：防御键长按）</li>
+                                <li><strong>技能 L</strong>：大招「丢便便」</li>
+                            </ul>
+                        </section>
+                        <section>
+                            <h3>🤍 茉莉（玩家2 / 人机）</h3>
+                            <ul>
+                                <li><strong>移动</strong>：方向键 ↑ ↓ ← →（触屏：右下角方向键）</li>
+                                <li><strong>攻击</strong>：小键盘 1</li>
+                                <li><strong>暗器</strong>：小键盘 0</li>
+                                <li><strong>防御</strong>：小键盘 2（长按）</li>
+                                <li><strong>技能</strong>：小键盘 3（猫爪拍击）</li>
+                            </ul>
+                        </section>
+                        <section>
+                            <h3>方向键连按（移动进阶）</h3>
+                            <p>对<strong>同一方向</strong>快速按键，效果会升级（触屏在按下方向键的瞬间同样生效）：</p>
+                            <ol>
+                                <li><strong>按 1 次</strong>：向该方向慢移一步（与长按慢移同速）。</li>
+                                <li><strong>0.3 秒内按第 2 次</strong>：快移一段，消耗 8 点能量，并进入「快移」状态；<strong>持续按住</strong>该方向键会继续快移并持续扣能量。</li>
+                                <li><strong>0.3 秒内按第 3 次</strong>：发动冲撞！沿该方向高速滑铲并可能撞飞对手；<strong>60 秒</strong>内只能冲撞一次，否则会提示「没力气了…」。</li>
+                            </ol>
+                            <p>单独<strong>长按</strong>方向键（不按连击节奏）= 持续慢移，不额外耗能量。</p>
+                        </section>
+                        <section>
+                            <h3>攻击与暗器</h3>
+                            <ul>
+                                <li>近战：背刺、暴击、连击会提高伤害。</li>
+                                <li>远程暗器：可被对方<strong>防御完全挡下</strong>，挡下后暗器落地消失。</li>
+                                <li>攻击、防御、技能互斥：举盾时不能攻击/放技能；攻击或技能中也不能举盾。</li>
+                            </ul>
+                        </section>
+                        <section>
+                            <h3>防御（护盾）</h3>
+                            <ul>
+                                <li>远程暗器：<strong>100% 格挡</strong>，不掉血。</li>
+                                <li>近战普攻与大招：随机减免约 <strong>12%～40%</strong> 伤害（不是完全免疫）。</li>
+                                <li>单次举盾最长 <strong>5 秒</strong>，到时自动放下；松开后可再次举盾。</li>
+                                <li>双方<strong>同时</strong>防御：屏幕爱心特效 + 亲亲音效。</li>
+                            </ul>
+                        </section>
+                        <section>
+                            <h3>能量与技能</h3>
+                            <p>能量条会随时间缓慢恢复。快移、冲撞、释放技能都会消耗能量；能量不足时无法快移或放技能（技能约需 35 能量）。</p>
+                        </section>
+                        <section>
+                            <h3>天上掉下来的食物</h3>
+                            <p>普通食物约每 <strong>5 秒</strong> 掉一种；猫草、塑料袋约每 <strong>2.5 秒</strong> 掉一种。更多食物会落在地上停留一会儿。</p>
+                            <ul>
+                                <li>🐱 猫粮、🍗 冻干、🥫 罐头、🐟 鱼干：捡到即回血（数值随机）。</li>
+                                <li>🌿 <strong>猫草</strong>（图标更大）：黑茶吃扣血（约为普通回血量的 <strong>2 倍</strong>）；茉莉吃回血 <strong>2 倍</strong>。</li>
+                                <li>🛍️ <strong>塑料袋</strong>（图标更大）：黑茶玩袋子回血 <strong>2 倍</strong>；茉莉被袋子缠住扣血 <strong>2 倍</strong>。</li>
+                            </ul>
+                        </section>
+                        <section>
+                            <h3>地图与场景</h3>
+                            <p>菜单可选樱花庭院（标准）、竹海秘境（×2 场地）、峡谷遗迹（×3 场地）。战斗中顶部可切换手绘 / 真实场景背景。</p>
+                        </section>
+                        <section>
+                            <h3>触屏提示</h3>
+                            <p>菜单里可设「触屏模式」。单人：左下方向、右下技能，顶部可切换控制黑茶或茉莉；双人：左右下角各一套按键。</p>
+                        </section>
+                    </div>
+                </div>
+            </div>
         </div>
 
         <!-- 结果界面 -->

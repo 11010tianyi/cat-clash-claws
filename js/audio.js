@@ -255,26 +255,36 @@ class AudioManager {
     playDeathSound() {
         if (!this.isInitialized || this.isMuted) return;
 
-        this.playNote(220, 0.35, 'sine', 0.22);
-        this.playNote(165, 0.45, 'triangle', 0.18);
+        const meow = [
+            { freq: 520, dur: 0.14, type: 'triangle', vol: 0.55 },
+            { freq: 680, dur: 0.18, type: 'sine', vol: 0.5 },
+            { freq: 420, dur: 0.22, type: 'triangle', vol: 0.48 },
+            { freq: 560, dur: 0.26, type: 'sine', vol: 0.52 }
+        ];
+        meow.forEach((note, i) => {
+            setTimeout(() => {
+                this.playNote(note.freq, note.dur, note.type, note.vol);
+            }, i * 110);
+        });
 
         setTimeout(() => {
-            this.playNote(140, 0.55, 'sine', 0.2);
-            this.playNote(110, 0.5, 'triangle', 0.14);
-        }, 180);
+            this.playNote(310, 0.35, 'sine', 0.38);
+            this.playNote(240, 0.4, 'triangle', 0.32);
+        }, 520);
 
-        setTimeout(() => {
-            this.playNote(90, 0.7, 'sine', 0.16);
-            this.playNote(70, 0.65, 'triangle', 0.1);
-        }, 420);
-
-        setTimeout(() => {
-            this.playNote(55, 0.9, 'sine', 0.08);
-        }, 720);
-
-        setTimeout(() => {
-            this.playNote(40, 1.1, 'triangle', 0.05);
-        }, 1100);
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            setTimeout(() => {
+                const utterance = new SpeechSynthesisUtterance('喵呜，我还会回来的！');
+                utterance.lang = 'zh-CN';
+                utterance.volume = Math.min(1, this.masterVolume + 0.25);
+                utterance.rate = 0.92;
+                utterance.pitch = 1.28;
+                const voice = this.pickSpeechVoice('shiro') || this.pickSpeechVoice('kuro');
+                if (voice) utterance.voice = voice;
+                window.speechSynthesis.speak(utterance);
+            }, 380);
+        }
     }
 
     playFoodPickupSound() {

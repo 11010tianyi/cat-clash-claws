@@ -41,8 +41,11 @@ class CatClashGame {
         };
         this.isRunning = false;
         this.foodItems = [];
-        this.foodSpawnTimer = 0;
-        this.foodSpawnInterval = 5000;
+        this.foodSpawnTimerNormal = 0;
+        this.foodSpawnTimerSpecial = 0;
+        this.foodSpawnIntervalNormal = 5000;
+        this.foodSpawnIntervalSpecial = 2500;
+        this.foodGroundStayChance = 0.38;
         this.heartsEffect = null;
         this.blockedProjectileDebris = [];
         this.defendKeyMap = { kuro: 'KeyK', shiro: 'Numpad2' };
@@ -116,6 +119,7 @@ class CatClashGame {
         this.setupSceneButtons();
         this.preloadSceneImages();
         this.setupTouchControls();
+        this.setupBattleHelp();
         this.updateTouchControlsVisibility();
         this.updateCatPreview();
         this.showMenu();
@@ -621,6 +625,8 @@ class CatClashGame {
             shouldShow = this.isTouchDevice();
         }
 
+        const gameScreen = document.getElementById('game-screen');
+
         if (shouldShow) {
             if (this.gameMode === 'ai') {
                 singlePlayerControls.classList.add('visible');
@@ -629,9 +635,11 @@ class CatClashGame {
                 singlePlayerControls.classList.remove('visible');
                 twoPlayerControls.classList.add('visible');
             }
+            gameScreen?.classList.add('touch-battle');
         } else {
             singlePlayerControls.classList.remove('visible');
             twoPlayerControls.classList.remove('visible');
+            gameScreen?.classList.remove('touch-battle');
         }
     }
 
@@ -639,6 +647,32 @@ class CatClashGame {
         return ('ontouchstart' in window) || 
                (navigator.maxTouchPoints > 0) || 
                (navigator.msMaxTouchPoints > 0);
+    }
+
+    setupBattleHelp() {
+        const openBtn = document.getElementById('battle-help-btn');
+        const modal = document.getElementById('battle-help-modal');
+        const closeBtn = document.getElementById('battle-help-close');
+        const backdrop = document.getElementById('battle-help-backdrop');
+        if (!openBtn || !modal) return;
+
+        const open = () => {
+            modal.classList.add('open');
+            modal.setAttribute('aria-hidden', 'false');
+        };
+        const close = () => {
+            modal.classList.remove('open');
+            modal.setAttribute('aria-hidden', 'true');
+        };
+
+        openBtn.addEventListener('click', open);
+        closeBtn?.addEventListener('click', close);
+        backdrop?.addEventListener('click', close);
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Escape' && modal.classList.contains('open')) {
+                close();
+            }
+        });
     }
 
     setupTouchControls() {
@@ -762,7 +796,8 @@ class CatClashGame {
     showMenu() {
         this.state = 'menu';
         this.uiManager.showScreen('menu');
-        
+        document.getElementById('game-screen')?.classList.remove('touch-battle');
+
         if (this.animationId) {
             cancelAnimationFrame(this.animationId);
             this.animationId = null;
@@ -783,12 +818,13 @@ class CatClashGame {
         this.gameLoop(this.lastTime);
 
         this.uiManager.showMessage('战斗开始！', 2000);
-        
+        this.updateTouchControlsVisibility();
+
         if (this.gameMode === 'ai') {
-            this.uiManager.updateActionHint('控制黑茶：WASD移动 | J攻击 K防御 L技能');
+            this.uiManager.updateActionHint('黑茶：WASD移动 | J攻击 U暗器 | K防御 L技能');
             this.uiManager.updateDifficultyBadge(this.difficulty);
         } else {
-            this.uiManager.updateActionHint('玩家1(WASD/JKL) vs 玩家2(方向键/小键盘123)');
+            this.uiManager.updateActionHint('玩家1(WASD/JKL/U) vs 玩家2(方向键/小键盘1023)');
             const difficultyBadge = document.getElementById('difficulty-badge');
             if (difficultyBadge) {
                 difficultyBadge.textContent = '🎮 双人对战';
@@ -831,7 +867,8 @@ class CatClashGame {
 
         this.cats = [kuro, shiro];
         this.foodItems = [];
-        this.foodSpawnTimer = 0;
+        this.foodSpawnTimerNormal = 0;
+        this.foodSpawnTimerSpecial = 0;
         this.heartsEffect = null;
         this.blockedProjectileDebris = [];
         this.touchDefendHeld = { kuro: false, shiro: false };
@@ -1424,28 +1461,129 @@ class CatClashGame {
         });
     }
 
-    spawnFood() {
-        const foodTypes = [
-            { name: '猫粮', emoji: '🐱', healMin: 3, healMax: 7, color: '#FFB347', size: 20, rarity: 0.35 },
-            { name: '鸡肉冻干', emoji: '🍗', healMin: 5, healMax: 10, color: '#FFA07A', size: 25, rarity: 0.28 },
-            { name: '罐头', emoji: '🥫', healMin: 8, healMax: 15, color: '#FFD700', size: 30, rarity: 0.22 },
-            { name: '鱼干', emoji: '🐟', healMin: 4, healMax: 9, color: '#87CEEB', size: 22, rarity: 0.15 }
+    getFoodTypeTable() {
+        return [
+            { name: '猫粮', emoji: '🐱', healMin: 3, healMax: 7, color: '#FFB347', size: 20, rarity: 0.28, special: null },
+            { name: '鸡肉冻干', emoji: '🍗', healMin: 5, healMax: 10, color: '#FFA07A', size: 25, rarity: 0.22, special: null },
+            { name: '罐头', emoji: '🥫', healMin: 8, healMax: 15, color: '#FFD700', size: 30, rarity: 0.18, special: null },
+            { name: '鱼干', emoji: '🐟', healMin: 4, healMax: 9, color: '#87CEEB', size: 22, rarity: 0.12, special: null },
+            { name: '猫草', emoji: '🌿', healMin: 3, healMax: 7, color: '#7CB342', size: 48, rarity: 1, special: 'catgrass' },
+            { name: '塑料袋', emoji: '🛍️', healMin: 3, healMax: 7, color: '#B0BEC5', size: 52, rarity: 1, special: 'plasticbag' }
         ];
+    }
 
-        const random = Math.random();
+    pickRandomFoodType(pool = 'normal') {
+        const foodTypes = this.getFoodTypeTable().filter((food) => {
+            if (pool === 'special') return food.special != null;
+            return food.special == null;
+        });
+        if (foodTypes.length === 0) {
+            return this.getFoodTypeTable()[0];
+        }
+
+        const totalRarity = foodTypes.reduce((sum, food) => sum + food.rarity, 0);
+        const random = Math.random() * totalRarity;
         let cumulative = 0;
-        let selectedFood = foodTypes[0];
 
         for (const food of foodTypes) {
             cumulative += food.rarity;
             if (random <= cumulative) {
-                selectedFood = food;
-                break;
+                return food;
             }
         }
 
+        return foodTypes[foodTypes.length - 1];
+    }
+
+    resolveFoodEffectForCat(cat, food) {
+        const base = food.heal;
+        const special = food.type.special;
+        const isKuro = cat.id === 'kuro';
+
+        if (!special) {
+            const oldHp = cat.hp;
+            cat.hp = Math.min(cat.maxHp, cat.hp + base);
+            return {
+                kind: 'heal',
+                amount: cat.hp - oldHp,
+                message: `${cat.name} 捡到了 ${food.type.name}！恢复 ${cat.hp - oldHp} 点生命！`
+            };
+        }
+
+        if (special === 'catgrass') {
+            if (isKuro) {
+                const damage = base * 2;
+                const oldHp = cat.hp;
+                cat.hp = Math.max(0, cat.hp - damage);
+                const actual = oldHp - cat.hp;
+                return {
+                    kind: 'damage',
+                    amount: actual,
+                    message: `${cat.name} 吃了猫草，失去 ${actual} 点生命！（黑茶不爱猫草）`
+                };
+            }
+            const oldHp = cat.hp;
+            cat.hp = Math.min(cat.maxHp, cat.hp + base * 2);
+            return {
+                kind: 'heal',
+                amount: cat.hp - oldHp,
+                message: `${cat.name} 吃了猫草，恢复 ${cat.hp - oldHp} 点生命！（茉莉最爱猫草）`
+            };
+        }
+
+        if (special === 'plasticbag') {
+            if (isKuro) {
+                const oldHp = cat.hp;
+                cat.hp = Math.min(cat.maxHp, cat.hp + base * 2);
+                return {
+                    kind: 'heal',
+                    amount: cat.hp - oldHp,
+                    message: `${cat.name} 玩到了塑料袋，恢复 ${cat.hp - oldHp} 点生命！（黑茶爱玩袋子）`
+                };
+            }
+            const damage = base * 2;
+            const oldHp = cat.hp;
+            cat.hp = Math.max(0, cat.hp - damage);
+            const actual = oldHp - cat.hp;
+            return {
+                kind: 'damage',
+                amount: actual,
+                message: `${cat.name} 被塑料袋缠住，失去 ${actual} 点生命！（茉莉怕塑料袋）`
+            };
+        }
+
+        const fallbackHp = cat.hp;
+        cat.hp = Math.min(cat.maxHp, cat.hp + base);
+        return {
+            kind: 'heal',
+            amount: cat.hp - fallbackHp,
+            message: `${cat.name} 捡到了 ${food.type.name}！恢复 ${cat.hp - fallbackHp} 点生命！`
+        };
+    }
+
+    playFoodPickupAudio(foodType) {
+        if (foodType.special === 'catgrass') {
+            audioManager.playFoodPickupSound();
+            return;
+        }
+        if (foodType.special === 'plasticbag') {
+            audioManager.playCanSound();
+            return;
+        }
+        if (foodType.name === '罐头') {
+            audioManager.playCanSound();
+        } else if (foodType.name === '鸡肉冻干') {
+            audioManager.playFreezeDriedSound();
+        } else {
+            audioManager.playFoodPickupSound();
+        }
+    }
+
+    spawnFood(pool = 'normal') {
+        const selectedFood = this.pickRandomFoodType(pool);
+
         const healAmount = Math.floor(Math.random() * (selectedFood.healMax - selectedFood.healMin + 1)) + selectedFood.healMin;
-        const isStayingOnGround = Math.random() < 0.15;
+        const isStayingOnGround = Math.random() < this.foodGroundStayChance;
         const groundY = this.worldHeight * 0.78 - 30;
 
         const foodItem = {
@@ -1469,10 +1607,16 @@ class CatClashGame {
     }
 
     updateFood(deltaTime) {
-        this.foodSpawnTimer += deltaTime;
-        if (this.foodSpawnTimer >= this.foodSpawnInterval) {
-            this.spawnFood();
-            this.foodSpawnTimer = 0;
+        this.foodSpawnTimerNormal += deltaTime;
+        if (this.foodSpawnTimerNormal >= this.foodSpawnIntervalNormal) {
+            this.spawnFood('normal');
+            this.foodSpawnTimerNormal = 0;
+        }
+
+        this.foodSpawnTimerSpecial += deltaTime;
+        if (this.foodSpawnTimerSpecial >= this.foodSpawnIntervalSpecial) {
+            this.spawnFood('special');
+            this.foodSpawnTimerSpecial = 0;
         }
 
         const currentTime = Date.now();
@@ -1510,34 +1654,38 @@ class CatClashGame {
                     Math.pow(food.y - catCenterY, 2)
                 );
 
-                if (dist < 80) {
-                    const healAmount = food.heal;
-                    const oldHp = cat.hp;
-                    cat.hp = Math.min(cat.maxHp, cat.hp + healAmount);
-                    const actualHeal = cat.hp - oldHp;
+                const pickupRadius = Math.max(80, food.size * 2.2);
+                if (dist < pickupRadius) {
+                    const effect = this.resolveFoodEffectForCat(cat, food);
 
-                    for (let j = 0; j < 6; j++) {
-                        cat.hearts.push({
-                            x: cat.x + cat.width / 2 + Utils.randomRange(-20, 20),
-                            y: cat.y + cat.height / 2,
-                            size: Utils.randomRange(12, 18),
-                            alpha: 1,
-                            vy: -1.2,
-                            life: 1
-                        });
+                    if (effect.kind === 'heal' && effect.amount > 0) {
+                        for (let j = 0; j < 6; j++) {
+                            cat.hearts.push({
+                                x: cat.x + cat.width / 2 + Utils.randomRange(-20, 20),
+                                y: cat.y + cat.height / 2,
+                                size: Utils.randomRange(12, 18),
+                                alpha: 1,
+                                vy: -1.2,
+                                life: 1
+                            });
+                        }
                     }
 
                     this.foodItems.splice(i, 1);
+                    this.playFoodPickupAudio(food.type);
 
-                    if (food.type.name === '罐头') {
-                        audioManager.playCanSound();
-                    } else if (food.type.name === '鸡肉冻干') {
-                        audioManager.playFreezeDriedSound();
-                    } else {
-                        audioManager.playFoodPickupSound();
+                    if (effect.kind === 'damage' && effect.amount > 0) {
+                        audioManager.playHitSound();
+                        this.uiManager.showDamage(cat, effect.amount, false, null);
                     }
 
-                    this.uiManager.showMessage(`${cat.name} 捡到了 ${food.type.name}！恢复 ${actualHeal} 点生命！`, 1500);
+                    this.uiManager.updateHP(cat);
+                    this.uiManager.showMessage(effect.message, 1800);
+
+                    if (cat.hp <= 0 && !cat.isDead && !cat.isDying) {
+                        cat.beginDeathAnimation();
+                    }
+
                     break;
                 }
             }

@@ -10,6 +10,7 @@
     --border-radius: 20px;
     --ui-scale: 1;
     --hud-pad: 20px;
+    --touch-dock-height: 0px;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
@@ -27,6 +28,8 @@ html, body {
     height: 100%;
     overflow: hidden;
     font-family: var(--font-body);
+    touch-action: manipulation;
+    -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -999,6 +1002,119 @@ body {
     text-align: center;
 }
 
+.battle-help-btn {
+    position: absolute;
+    top: calc(var(--hud-pad) + var(--safe-top));
+    right: calc(var(--hud-pad) + var(--safe-right));
+    z-index: 40;
+    width: clamp(36px, 9vw, 44px);
+    height: clamp(36px, 9vw, 44px);
+    border: none;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #FF6B9D, #C44569);
+    color: #fff;
+    font-family: var(--font-display);
+    font-size: clamp(18px, 4.5vw, 22px);
+    font-weight: bold;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(196, 69, 105, 0.45);
+    pointer-events: auto;
+    line-height: 1;
+}
+
+.battle-help-btn:hover {
+    transform: scale(1.06);
+}
+
+.battle-help-modal {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: calc(var(--safe-top) + 12px) calc(var(--safe-right) + 12px) calc(var(--safe-bottom) + 12px) calc(var(--safe-left) + 12px);
+    pointer-events: none;
+}
+
+.battle-help-modal.open {
+    display: flex;
+    pointer-events: auto;
+}
+
+.battle-help-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(20, 10, 30, 0.55);
+}
+
+.battle-help-panel {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 520px);
+    max-height: min(78vh, 640px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    background: rgba(255, 255, 255, 0.97);
+    border-radius: 20px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+    padding: 20px 18px 16px;
+}
+
+.battle-help-close {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    border: none;
+    background: transparent;
+    font-size: 28px;
+    line-height: 1;
+    color: #888;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+
+.battle-help-title {
+    font-family: var(--font-display);
+    font-size: clamp(20px, 5vw, 26px);
+    color: #C44569;
+    margin: 0 36px 12px 0;
+    text-align: center;
+}
+
+.battle-help-body {
+    overflow-y: auto;
+    padding-right: 4px;
+    font-size: clamp(13px, 3.2vw, 15px);
+    line-height: 1.55;
+    color: #333;
+}
+
+.battle-help-body section {
+    margin-bottom: 14px;
+}
+
+.battle-help-body h3 {
+    font-size: clamp(14px, 3.5vw, 16px);
+    color: #C44569;
+    margin: 0 0 6px;
+}
+
+.battle-help-body ul,
+.battle-help-body ol {
+    margin: 0;
+    padding-left: 1.25em;
+}
+
+.battle-help-body li {
+    margin-bottom: 4px;
+}
+
+.battle-help-body p {
+    margin: 0 0 6px;
+}
+
 .touch-controls {
     position: absolute;
     bottom: calc(10px + var(--safe-bottom));
@@ -1105,6 +1221,9 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
 }
 
 .touch-btn:active {
@@ -1414,6 +1533,60 @@ body {
     border-radius: 50%;
 }
 
+#game-screen.touch-battle {
+    --touch-dock-height: clamp(168px, 30vh, 230px);
+}
+
+#game-screen.touch-battle .battle-info {
+    top: calc(var(--hud-pad) + var(--safe-top) + 54px);
+}
+
+#game-screen.touch-battle .battle-ui.top-ui {
+    flex-direction: row;
+    align-items: flex-start;
+    gap: clamp(4px, 1.5vw, 10px);
+}
+
+#game-screen.touch-battle .top-ui .player-stats {
+    flex: 1 1 0;
+    min-width: 0;
+    max-width: 46vw;
+    padding: 8px 10px;
+}
+
+#game-screen.touch-battle .top-ui .player-name {
+    font-size: clamp(13px, 3.4vw, 17px);
+    margin-bottom: 6px;
+}
+
+#game-screen.touch-battle .hp-bar-container {
+    height: 18px;
+    margin-bottom: 5px;
+}
+
+#game-screen.touch-battle .energy-bar-container {
+    height: 10px;
+}
+
+#game-screen.touch-battle .action-hint {
+    font-size: clamp(10px, 2.6vw, 12px);
+    padding: 6px 10px;
+    max-width: 92vw;
+}
+
+#game-screen.touch-battle .touch-corner-left {
+    max-width: 54%;
+}
+
+#game-screen.touch-battle .touch-corner-right {
+    max-width: 46%;
+}
+
+#game-screen.touch-battle .touch-tab {
+    padding: 6px 12px;
+    font-size: 13px;
+}
+
 @media (max-width: 768px) {
     .menu-content {
         padding: 30px 20px;
@@ -1440,23 +1613,45 @@ body {
         height: 110px;
     }
     
-    .battle-ui {
-        flex-direction: column;
-        align-items: center;
-        gap: 10px;
+    .battle-ui.top-ui {
+        flex-direction: row;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: clamp(4px, 1.5vw, 8px);
     }
     
-    .player-stats {
-        min-width: auto;
-        width: 90%;
+    .top-ui .player-stats {
+        flex: 1 1 0;
+        min-width: 0;
+        max-width: 48vw;
+        width: auto;
+        padding: 8px 10px;
     }
     
-    .center-info {
-        position: relative;
-        top: auto;
-        left: auto;
-        transform: none;
-        margin: 10px 0;
+    .battle-info-header {
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 4px;
+    }
+
+    .turn-indicator {
+        font-size: clamp(10px, 2.6vw, 13px);
+        padding: 6px 8px;
+        white-space: normal;
+        line-height: 1.25;
+        max-width: 44vw;
+        text-align: center;
+    }
+
+    .battle-scene-btn {
+        width: 34px;
+        height: 30px;
+        font-size: 16px;
+    }
+
+    .difficulty-badge {
+        font-size: clamp(10px, 2.5vw, 12px);
+        padding: 4px 8px;
     }
     
     .touch-controls {
@@ -1469,6 +1664,12 @@ body {
 
     .touch-controls {
         bottom: calc(6px + var(--safe-bottom));
+    }
+
+    #game-screen.touch-battle .battle-help-btn {
+        top: auto;
+        bottom: calc(var(--touch-dock-height) + var(--safe-bottom) + 6px);
+        right: calc(8px + var(--safe-right));
     }
 
     .round-info,
@@ -1484,6 +1685,42 @@ body {
 }
 
 @media (max-width: 480px) {
+    #game-screen.touch-battle {
+        --touch-dock-height: clamp(176px, 32vh, 240px);
+    }
+
+    .touch-btn.move-up,
+    .touch-btn.move-down,
+    .touch-btn.move-left,
+    .touch-btn.move-right,
+    .touch-btn.move-up-p1,
+    .touch-btn.move-down-p1,
+    .touch-btn.move-left-p1,
+    .touch-btn.move-right-p1,
+    .touch-btn.move-up-p2,
+    .touch-btn.move-down-p2,
+    .touch-btn.move-left-p2,
+    .touch-btn.move-right-p2 {
+        width: clamp(52px, 14vw, 62px);
+        height: clamp(52px, 14vw, 62px);
+        min-width: 48px;
+        min-height: 48px;
+    }
+
+    .touch-btn.attack-btn,
+    .touch-btn.defend-btn,
+    .touch-btn.skill-btn,
+    .touch-btn.attack-btn-p1,
+    .touch-btn.defend-btn-p1,
+    .touch-btn.skill-btn-p1,
+    .touch-btn.attack-btn-p2,
+    .touch-btn.defend-btn-p2,
+    .touch-btn.skill-btn-p2 {
+        min-height: 44px;
+        padding: 10px 12px;
+        font-size: 13px;
+    }
+
     .menu-title {
         font-size: 32px;
     }
