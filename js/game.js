@@ -46,6 +46,8 @@ class CatClashGame {
         this.foodSpawnIntervalNormal = 5000;
         this.foodSpawnIntervalSpecial = 2500;
         this.foodGroundStayChance = 0.38;
+        this.foodAlphaMin = 0.92;
+        this.foodGroundFadeStart = 0.7;
         this.heartsEffect = null;
         this.blockedProjectileDebris = [];
         this.defendKeyMap = { kuro: 'KeyK', shiro: 'Numpad2' };
@@ -1579,17 +1581,22 @@ class CatClashGame {
         }
     }
 
+    getFoodGroundY() {
+        return this.worldHeight * 0.78 - 30;
+    }
+
     spawnFood(pool = 'normal') {
         const selectedFood = this.pickRandomFoodType(pool);
 
         const healAmount = Math.floor(Math.random() * (selectedFood.healMax - selectedFood.healMin + 1)) + selectedFood.healMin;
         const isStayingOnGround = Math.random() < this.foodGroundStayChance;
-        const groundY = this.worldHeight * 0.78 - 30;
+        const groundY = this.getFoodGroundY();
+        const mapScale = this.mapScale || 1;
 
         const foodItem = {
             x: Math.random() * (this.worldWidth - 100) + 50,
             y: -30,
-            vy: 2 + Math.random() * 1.5,
+            vy: (2 + Math.random() * 1.5) * mapScale,
             rotation: 0,
             rotationSpeed: (Math.random() - 0.5) * 0.1,
             alpha: 1,
@@ -1628,17 +1635,22 @@ class CatClashGame {
                 const elapsed = currentTime - f.startTime;
                 const stayProgress = elapsed / f.stayTime;
                 f.life = Math.max(0, 1 - stayProgress);
-                f.alpha = f.life;
+                if (stayProgress < this.foodGroundFadeStart) {
+                    f.alpha = 1;
+                } else {
+                    const fadeT = (stayProgress - this.foodGroundFadeStart) / (1 - this.foodGroundFadeStart);
+                    f.alpha = Math.max(this.foodAlphaMin, 1 - fadeT);
+                }
                 if (stayProgress >= 1) {
                     return false;
                 }
             } else {
                 f.y += f.vy;
-                f.life -= 0.008;
-                f.alpha = f.life;
+                f.life -= 0.005;
+                f.alpha = Math.max(this.foodAlphaMin, f.life);
             }
             f.rotation += f.rotationSpeed;
-            return f.life > 0 && f.y < this.canvas.height + 50;
+            return f.life > 0 && f.y < this.worldHeight + 50;
         });
     }
 
@@ -2008,9 +2020,16 @@ class CatClashGame {
             this.ctx.font = `${food.size}px Arial`;
             this.ctx.translate(food.x, food.y);
             this.ctx.rotate(food.rotation);
-            this.ctx.shadowColor = food.type.color;
-            this.ctx.shadowBlur = 10;
-            this.ctx.fillText(food.type.emoji, -food.size / 2, food.size / 2);
+            this.ctx.textAlign = 'center';
+            this.ctx.textBaseline = 'middle';
+            this.ctx.shadowColor = 'rgba(0, 0, 0, 0.45)';
+            this.ctx.shadowBlur = 6;
+            this.ctx.shadowOffsetX = 1;
+            this.ctx.shadowOffsetY = 2;
+            this.ctx.lineWidth = Math.max(2, food.size * 0.08);
+            this.ctx.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+            this.ctx.strokeText(food.type.emoji, 0, 0);
+            this.ctx.fillText(food.type.emoji, 0, 0);
             this.ctx.restore();
         });
     }
