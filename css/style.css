@@ -1924,3 +1924,135 @@ body {
     z-index: 5;
 }
 
+
+/* --- menu advanced + device layout (auto) --- */
+:root {
+    --menu-pad-x: 60px;
+    --menu-pad-y: 50px;
+    --menu-title-size: 56px;
+    --menu-gap: 25px;
+    --touch-pad: 72px;
+    --battle-info-top: 54px;
+}
+
+.menu-advanced-toggle {
+    display: block;
+    width: 100%;
+    max-width: 320px;
+    margin: 12px auto 0;
+    padding: 10px 16px;
+    border: 2px dashed rgba(255, 255, 255, 0.45);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    font-size: clamp(13px, 3.2vw, 15px);
+    cursor: pointer;
+    font-family: var(--font-body);
+}
+
+.menu-advanced-panel {
+    display: none;
+    flex-direction: column;
+    gap: var(--menu-gap, 16px);
+    margin-top: 12px;
+    max-height: min(52vh, 420px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.menu-advanced-panel.is-open {
+    display: flex;
+}
+
+.menu-content {
+    padding: var(--menu-pad-y, 50px) var(--menu-pad-x, 60px);
+    max-height: min(96dvh, 100%);
+}
+
+.game-title {
+    font-size: var(--menu-title-size, 56px);
+}
+
+.mode-section,
+.difficulty-section {
+    margin-bottom: var(--menu-gap, 20px);
+}
+
+body.is-mobile .menu-content {
+    border-radius: 24px;
+    max-width: min(100%, 100vw - 16px);
+}
+
+body.is-mobile .game-subtitle {
+    margin-bottom: 14px;
+    font-size: clamp(14px, 3.5vw, 18px);
+}
+
+body.is-mobile .mode-title,
+body.is-mobile .difficulty-title {
+    font-size: clamp(18px, 4.5vw, 24px);
+    margin-bottom: 10px;
+}
+
+body.is-mobile .mode-btn,
+body.is-mobile .difficulty-btn {
+    padding: 10px 18px;
+    font-size: clamp(13px, 3.4vw, 16px);
+}
+
+body.is-mobile .btn-start {
+    margin-top: 14px;
+    padding: 14px 28px;
+    font-size: clamp(16px, 4vw, 20px);
+}
+
+body.is-mobile .controls-hint {
+    margin-top: 12px;
+    padding: 10px 12px;
+    font-size: clamp(11px, 2.8vw, 13px);
+    max-height: 28vh;
+    overflow-y: auto;
+}
+
+body.is-mobile .controls-hint .hint-section h4 {
+    font-size: clamp(12px, 3vw, 14px);
+}
+
+body.is-mobile .controls-hint p {
+    line-height: 1.35;
+}
+
+body.is-short-screen .menu-advanced-panel.is-open {
+    max-height: 38vh;
+}
+
+body.is-mobile #game-screen.touch-battle .battle-ui.top-ui {
+    top: calc(var(--safe-top) + var(--battle-info-top, 48px));
+    padding-left: calc(var(--hud-pad) + var(--safe-left));
+    padding-right: calc(var(--hud-pad) + var(--safe-right));
+}
+
+body.is-mobile #game-screen.touch-battle .touch-btn {
+    width: var(--touch-pad, 56px);
+    height: var(--touch-pad, 56px);
+    min-width: var(--touch-pad, 56px);
+    min-height: var(--touch-pad, 56px);
+    font-size: clamp(11px, 2.8vw, 14px);
+}
+
+
+.playtype-section { margin-bottom: 16px; text-align: left; }
+.playtype-title { font-family: var(--font-display); font-size: 22px; color: #fff; margin-bottom: 10px; text-align: center; }
+.playtype-buttons { display: flex; flex-direction: column; gap: 8px; }
+.playtype-btn {
+    display: flex; flex-direction: column; align-items: flex-start;
+    padding: 10px 14px; border-radius: 14px; border: 2px solid transparent;
+    background: rgba(255,255,255,0.9); cursor: pointer; font-size: 15px; text-align: left;
+}
+.playtype-btn.selected { border-color: #FF6B9D; box-shadow: 0 4px 16px rgba(255,107,157,0.35); }
+.playtype-desc { font-size: 12px; color: #666; margin-top: 4px; }
+body.minigame-mode .turn-indicator { font-size: clamp(11px, 2.8vw, 14px); }
+body.minigame-mode .hp-bar-container { opacity: 0.35; pointer-events: none; }
+body.minigame-mode .energy-bar-container { display: none; }
+body.minigame-mode.playtype-food .energy-bar-container { display: block; opacity: 1; }
+body.minigame-mode.playtype-food .hp-bar-container { opacity: 0.55; }

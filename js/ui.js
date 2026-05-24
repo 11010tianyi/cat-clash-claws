@@ -287,6 +287,39 @@ class UIManager {
         }, duration);
     }
 
+
+    showMinigameResult(playType, scores, winner) {
+        this.showScreen('result');
+        const { kuro, shiro } = scores;
+        const modeLabel = playType === 'food' ? '抢食物' : '打耗子';
+        this.elements.resultBadge.textContent = winner ? '🏆' : '🤝';
+        this.elements.resultTitle.textContent = `${modeLabel} · 时间到`;
+        this.elements.winnerDisplay.style.display = '';
+
+        if (winner) {
+            this.elements.resultSubtitle.innerHTML = `
+                <div style="font-size: 28px; margin-bottom: 12px;">${winner.name} 获胜！</div>
+                <div style="font-size: 20px; color: #666;">得分：黑茶 ${kuro} - ${shiro} 茉莉</div>
+            `;
+            this.elements.winnerCat.innerHTML = winner.id === 'kuro'
+                ? this.createCatPreviewSVG('black')
+                : this.createCatPreviewSVG('white');
+            this.elements.winnerInfo.innerHTML = `
+                <h3>${winner.name}</h3>
+                <p>${winner.breed} · ${winner.gender} · ${winner.age}岁</p>
+                <p style="margin-top: 10px; font-size: 22px;">${playType === 'food' ? '吃了' : '消灭'} ${scores[winner.id]} 个</p>
+            `;
+            this.createConfetti();
+        } else {
+            this.elements.resultSubtitle.innerHTML = `
+                <div style="font-size: 24px;">平局！</div>
+                <div style="font-size: 18px; color: #666; margin-top: 10px;">得分：黑茶 ${kuro} - ${shiro} 茉莉</div>
+            `;
+            this.elements.winnerCat.innerHTML = this.createCatPreviewSVG('black');
+            this.elements.winnerInfo.innerHTML = '<h3>势均力敌</h3><p>再来一局分出胜负吧</p>';
+        }
+    }
+
     showResult(winner, roundWins = { kuro: 0, shiro: 0 }) {
         this.showScreen('result');
         

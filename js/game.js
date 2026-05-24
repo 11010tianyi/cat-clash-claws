@@ -12,6 +12,13 @@ class CatClashGame {
         this.keys = {};
         this.difficulty = 'medium';
         this.gameMode = 'ai';
+        this.playType = 'battle';
+        this.modeScores = { kuro: 0, shiro: 0 };
+        this.modeTimerRemaining = MINIGAME_DURATION_MS || 90000;
+        this.rats = [];
+        this.ratSpawnTimer = 0;
+        this.minigameEnded = false;
+        this.ratHitEffects = [];
         this.characterStyle = 'photo';
         this.touchMode = 'auto';
         this.currentTouchPlayer = 'kuro';
@@ -90,6 +97,7 @@ class CatClashGame {
         this.sceneryRenderer = new SceneryRenderer();
         this.sceneImages = {};
         this.sceneImagesLoaded = {};
+        this.photoGalleryReady = false;
 
         this.directionKeyMap = {
             kuro: { up: 'KeyW', down: 'KeyS', left: 'KeyA', right: 'KeyD' },
@@ -111,6 +119,8 @@ class CatClashGame {
         this.uiManager.init();
         this.uiManager.addHPAnimation();
 
+        this.layoutMetrics = this.getLayoutMetrics();
+        this.applyDeviceLayout();
         this.initBackgroundElements();
         this.setupEventListeners();
         this.setupDifficultyButtons();
@@ -120,8 +130,11 @@ class CatClashGame {
         this.setupMapButtons();
         this.setupSceneButtons();
         this.preloadSceneImages();
+        this.initPhotoGallery();
         this.setupTouchControls();
         this.setupBattleHelp();
+        this.setupPlayTypeButtons();
+        this.setupMenuAdvancedPanel();
         this.updateTouchControlsVisibility();
         this.updateCatPreview();
         this.showMenu();
@@ -140,10 +153,383 @@ class CatClashGame {
         return {
             vw,
             vh,
+            shortSide,
             uiScale,
             catSize: Math.round(160 * uiScale),
             isMobile
         };
+    }
+
+    applyDeviceLayout() {
+        const m = this.layoutMetrics || this.getLayoutMetrics();
+        const root = document.documentElement;
+        const hudPad = m.isMobile ? Math.max(6, Math.round(m.vw * 0.018)) : 20;
+        const touchPad = Math.max(48, Math.round(m.shortSide * 0.12));
+        const dockH = m.isMobile ? Math.round(m.vh * 0.3) : 0;
+
+        root.style.setProperty('--ui-scale', String(m.uiScale));
+        root.style.setProperty('--hud-pad', `${hudPad}px`);
+        root.style.setProperty('--menu-pad-x', m.isMobile ? `${Math.max(12, Math.round(m.vw * 0.04))}px` : '60px');
+        root.style.setProperty('--menu-pad-y', m.isMobile ? `${Math.max(8, Math.round(m.vh * 0.018))}px` : '50px');
+        root.style.setProperty('--menu-title-size', `${Math.round(Math.min(52, m.vw * 0.105))}px`);
+        root.style.setProperty('--menu-gap', m.isMobile ? '10px' : '25px');
+        root.style.setProperty('--touch-pad', `${touchPad}px`);
+        root.style.setProperty('--touch-dock-height', `${dockH}px`);
+        root.style.setProperty('--battle-info-top', m.isMobile ? `${Math.round(m.vh * 0.105)}px` : '54px');
+
+        document.body.classList.toggle('is-mobile', m.isMobile);
+        document.body.classList.toggle('is-short-screen', m.vh < 680);
+    }
+
+    getProjectileWorldMetrics() {
+        return {
+            mapScale: this.mapScale || 1,
+            worldWidth: this.worldWidth || this.canvas?.width || 1200,
+            worldHeight: this.worldHeight || this.canvas?.height || 800
+        };
+    }
+
+    syncProjectileWorldMetrics() {
+        const metrics = this.getProjectileWorldMetrics();
+        (this.cats || []).forEach((cat) => {
+            cat._projectileWorldMetrics = metrics;
+        });
+        return metrics;
+    }
+
+    async initPhotoGallery() {
+        if (!window.PhotoSceneGallery) return;
+        try {
+            await PhotoSceneGallery.loadManifest();
+            PhotoSceneGallery.setByMapId(this.selectedMap);
+        } catch (e) {
+            console.warn('Photo gallery init failed', e);
+        }
+    }
+
+    getPhotoBackgroundImage() {
+        if (this.sceneBackgroundMode !== 'photo') return null;
+        if (window.PhotoSceneGallery?.getCurrentImage) {
+            const img = PhotoSceneGallery.getCurrentImage();
+            if (img && img.complete) return img;
+        }
+        const preset = this.getMapPreset();
+        if (preset?.photoSrc) {
+            const mapId = this.selectedMap;
+            this.ensureSceneImageLoaded(mapId);
+            const legacy = this.sceneImages[mapId];
+            if (legacy?.complete) return legacy;
+        }
+        return null;
+    }
+
+    cyclePhotoBackground() {
+        if (!window.PhotoSceneGallery) {
+            this.setSceneBackgroundMode('photo');
+            return;
+        }
+        const entry = PhotoSceneGallery.pickRandomNext();
+        if (entry) {
+            PhotoSceneGallery.ensureImage(entry.file);
+        }
+        this.setSceneBackgroundMode('photo', true);
+        if (this.uiManager) {
+            const name = entry?.file?.replace(/\.[a-z]+$/i, '') || '场景';
+            this.uiManager.showMessage(`背景：${name}`, 900);
+        }
+    }
+
+    setupMenuAdvancedPanel() {
+        const toggle = document.getElementById('menu-advanced-toggle');
+        const panel = document.getElementById('menu-advanced-panel');
+        if (!toggle || !panel) return;
+
+        const setOpen = (open) => {
+            panel.classList.toggle('is-open', open);
+            toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+            toggle.textContent = open ? '收起更多选项 ▲' : '展开更多选项 ▼';
+        };
+
+        setOpen(false);
+        toggle.addEventListener('click', () => setOpen(!panel.classList.contains('is-open')));
+    }
+
+
+    setupPlayTypeButtons() {
+        const buttons = document.querySelectorAll('.playtype-btn');
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                buttons.forEach((b) => b.classList.remove('selected'));
+                btn.classList.add('selected');
+                this.playType = btn.dataset.playtype || 'battle';
+                this.updatePlayTypeMenuUI();
+            });
+        });
+        const defaultBtn = document.querySelector('.playtype-btn.battle');
+        if (defaultBtn && !document.querySelector('.playtype-btn.selected')) {
+            defaultBtn.classList.add('selected');
+        }
+        this.updatePlayTypeMenuUI();
+    }
+
+    updatePlayTypeMenuUI() {
+        const startBtn = document.querySelector('.btn-start .btn-text');
+        const hints = document.querySelectorAll('.controls-hint .hint-section p');
+        document.body.classList.toggle('playtype-food', this.playType === 'food');
+        document.body.classList.toggle('playtype-target', this.playType === 'target');
+        if (startBtn) {
+            if (this.playType === 'food') startBtn.textContent = '开始抢食物';
+            else if (this.playType === 'target') startBtn.textContent = '开始打耗子';
+            else startBtn.textContent = '开始战斗';
+        }
+        if (hints.length >= 2) {
+            if (this.playType === 'food') {
+                hints[0].textContent = 'W A S D 移动 | 猫草黑茶-2茉莉+2 塑料袋各+2（90秒）';
+                hints[1].textContent = '方向键移动 | 普通食物+1分，得分高者胜';
+            } else if (this.playType === 'target') {
+                hints[0].textContent = 'W A S D 移动 | U 暗器打耗子（J 也会发射暗器）';
+                hints[1].textContent = '方向键移动 | 小键盘0/1 暗器 | 注意反噬鼠！';
+            }
+        }
+    }
+
+    isBattlePlayType() { return this.playType === 'battle'; }
+    isFoodPlayType() { return this.playType === 'food'; }
+    isTargetPlayType() { return this.playType === 'target'; }
+
+    formatModeTimer(ms) {
+        const sec = Math.max(0, Math.ceil(ms / 1000));
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    }
+
+    updateMinigameHud() {
+        const turnEl = document.getElementById('turn-count');
+        const badge = document.getElementById('difficulty-badge');
+        document.body.classList.toggle('minigame-mode', !this.isBattlePlayType());
+        document.body.classList.toggle('playtype-food', this.isFoodPlayType());
+        document.body.classList.toggle('playtype-target', this.isTargetPlayType());
+        if (!this.isBattlePlayType() && turnEl) {
+            turnEl.textContent = `${this.formatModeTimer(this.modeTimerRemaining)} · 黑茶${this.modeScores.kuro} : 茉莉${this.modeScores.shiro}`;
+        }
+        if (badge && !this.isBattlePlayType()) {
+            badge.textContent = this.playType === 'food' ? '🍖 抢食物' : '🎯 打耗子';
+            badge.style.display = '';
+        }
+    }
+
+    initCatsForSession() {
+        this.applyMapLayout();
+        this.resetBattleRuntimeState();
+        const spawns = this.getCatSpawnPositions();
+        const layoutScale = this.layoutMetrics?.uiScale || 1;
+        const kuro = new KuroCat(spawns.kuro.x, spawns.kuro.y, 'right', this.characterStyle);
+        const shiro = new ShiroCat(spawns.shiro.x, spawns.shiro.y, 'left', this.characterStyle);
+        kuro.applyLayoutScale(layoutScale);
+        shiro.applyLayoutScale(layoutScale);
+        this.cats = [kuro, shiro];
+        this.syncProjectileWorldMetrics();
+        this.foodItems = [];
+        this.foodSpawnTimerNormal = 0;
+        this.foodSpawnTimerSpecial = 0;
+        this.heartsEffect = null;
+        this.blockedProjectileDebris = [];
+        this.rats = [];
+        this.ratSpawnTimer = 0;
+        this.minigameEnded = false;
+        this.ratHitEffects = [];
+        this.modeScores = { kuro: 0, shiro: 0 };
+        this.modeTimerRemaining = typeof MINIGAME_DURATION_MS !== 'undefined' ? MINIGAME_DURATION_MS : 90000;
+        this.touchDefendHeld = { kuro: false, shiro: false };
+        this.touchControls = {
+            kuro: { up: false, down: false, left: false, right: false },
+            shiro: { up: false, down: false, left: false, right: false }
+        };
+        if (this.gameMode === 'ai') {
+            this.aiSystem = new CatAI(this.difficulty);
+        } else {
+            this.aiSystem = null;
+        }
+        this.uiManager.updateHP(kuro);
+        this.uiManager.updateHP(shiro);
+        this.uiManager.updateEnergy(kuro);
+        this.uiManager.updateEnergy(shiro);
+    }
+
+    initFoodMode() {
+        this.initCatsForSession();
+        this.battleSystem = null;
+        this.foodSpawnIntervalNormal = 2200;
+        this.foodSpawnIntervalSpecial = 1400;
+        this.cats.forEach((cat) => {
+            cat.energy = cat.maxEnergy;
+        });
+        document.body.classList.add('playtype-food');
+        document.body.classList.remove('playtype-target');
+        this.uiManager.updateRound(1, { kuro: 0, shiro: 0 });
+        this.cats.forEach((c) => this.uiManager.updateEnergy(c));
+        this.updateMinigameHud();
+        this.updateBattleModeUI();
+    }
+
+    initTargetMode() {
+        this.initCatsForSession();
+        this.battleSystem = null;
+        this.ratHitEffects = [];
+        document.body.classList.add('playtype-target');
+        document.body.classList.remove('playtype-food');
+        for (let i = 0; i < 4; i++) MinigameRatSystem.spawnRat(this);
+        this.uiManager.updateRound(1, { kuro: 0, shiro: 0 });
+        this.updateMinigameHud();
+        this.updateBattleModeUI();
+    }
+
+    updateBattleModeUI() {
+        document.querySelectorAll('.hp-bar-container').forEach((el) => {
+            el.style.opacity = this.isBattlePlayType() ? '' : '0.35';
+        });
+    }
+
+    updateMinigameTimer(deltaTime) {
+        if (this.isBattlePlayType() || this.minigameEnded) return;
+        this.modeTimerRemaining -= deltaTime;
+        this.updateMinigameHud();
+        if (this.modeTimerRemaining <= 0) this.endMinigame();
+    }
+
+    endMinigame() {
+        if (this.minigameEnded) return;
+        this.minigameEnded = true;
+        this.isRunning = false;
+        audioManager.stopBackgroundMusic();
+        const { kuro, shiro } = this.modeScores;
+        let winner = null;
+        if (kuro > shiro) winner = this.cats.find((c) => c.id === 'kuro');
+        else if (shiro > kuro) winner = this.cats.find((c) => c.id === 'shiro');
+        if (winner) audioManager.playVictorySound();
+        else audioManager.playDefeatSound();
+        setTimeout(() => {
+            this.uiManager.showMinigameResult(this.playType, this.modeScores, winner);
+        }, 800);
+    }
+
+    updateFoodModeAI(deltaTime) {
+        const aiCat = this.cats.find((c) => c.id === 'shiro');
+        if (!aiCat || aiCat.isDead) return;
+        const cx = aiCat.x + aiCat.width / 2;
+        const cy = aiCat.y + aiCat.height / 2;
+        let nearest = null;
+        let best = Infinity;
+        for (const food of this.foodItems) {
+            const d = Math.hypot(food.x - cx, food.y - cy);
+            if (d < best) { best = d; nearest = food; }
+        }
+        const ms = this.NORMAL_MOVE_SPEED * 0.85;
+        if (nearest) {
+            if (nearest.x > cx + 8) this.moveCat('shiro', ms, 0);
+            else if (nearest.x < cx - 8) this.moveCat('shiro', -ms, 0);
+            if (nearest.y > cy + 8) this.moveCat('shiro', 0, ms);
+            else if (nearest.y < cy - 8) this.moveCat('shiro', 0, -ms);
+        } else {
+            this.moveCat('shiro', (Math.random() - 0.5) * ms * 2, (Math.random() - 0.5) * ms * 2);
+        }
+    }
+
+    updateTargetModeAI(deltaTime) {
+        const aiCat = this.cats.find((c) => c.id === 'shiro');
+        if (!aiCat || aiCat.isDead) return;
+        const cx = aiCat.x + aiCat.width / 2;
+        const cy = aiCat.y + aiCat.height / 2;
+        const rat = MinigameRatSystem.findNearestRat(this, cx, cy, 900);
+        const ms = this.NORMAL_MOVE_SPEED * 0.8;
+        if (rat) {
+            if (rat.x > cx + 12) this.moveCat('shiro', ms, 0);
+            else if (rat.x < cx - 12) this.moveCat('shiro', -ms, 0);
+            if (rat.y > cy + 12) this.moveCat('shiro', 0, ms);
+            else if (rat.y < cy - 12) this.moveCat('shiro', 0, -ms);
+            if (Math.random() < 0.04) this.fireProjectileTowardRat('shiro');
+        }
+    }
+
+    updateTargetRats(deltaTime) {
+        MinigameRatSystem.updateRats(this, deltaTime);
+        this.ratSpawnTimer += deltaTime;
+        const elapsed = (typeof MINIGAME_DURATION_MS !== 'undefined' ? MINIGAME_DURATION_MS : 90000) - this.modeTimerRemaining;
+        const interval = Math.max(900, 1800 - elapsed / 40);
+        if (this.ratSpawnTimer >= interval && this.rats.length < 10) {
+            MinigameRatSystem.spawnRat(this);
+            this.ratSpawnTimer = 0;
+        }
+    }
+
+    fireProjectileTowardRat(catId) {
+        const attacker = this.cats.find((c) => c.id === catId);
+        if (!attacker || attacker.isDead || !attacker.canStartAction('projectile')) return;
+        const cx = attacker.x + attacker.width / 2;
+        const cy = attacker.y + attacker.height / 2;
+        const rat = MinigameRatSystem.findNearestRat(this, cx, cy, 1200);
+        let target;
+        if (rat) {
+            target = MinigameRatSystem.ratAsTarget(rat);
+        } else {
+            const dir = attacker.direction === 'left' ? -1 : 1;
+            target = { id: 'dummy', x: cx + dir * 400, y: cy, width: 40, height: 40, isDefending: false, isDead: false };
+        }
+        audioManager.playProjectileSound();
+        const worldMetrics = this.getProjectileWorldMetrics();
+        attacker._projectileWorldMetrics = worldMetrics;
+        attacker.fireProjectile(target, worldMetrics);
+    }
+
+    checkProjectileRatCollisions() {
+        if (!this.isTargetPlayType()) return;
+        for (const attacker of this.cats) {
+            attacker.projectiles = attacker.projectiles.filter((proj) => {
+                for (let i = this.rats.length - 1; i >= 0; i--) {
+                    const rat = this.rats[i];
+                    const dist = Math.hypot(proj.x - rat.x, proj.y - rat.y);
+                    if (dist < rat.size * 0.72) {
+                        rat.hp -= 1;
+                        rat.hitFlash = 1;
+                        if (rat.hp <= 0) {
+                            MinigameRatSystem.spawnHitEffects(this, rat.x, rat.y, 'kill');
+                            this.modeScores[attacker.id] = (this.modeScores[attacker.id] || 0) + (rat.points || 1);
+                            if (rat.counterDamage) {
+                                const dmg = rat.counterDamage;
+                                attacker.takeDamage(dmg, null);
+                                this.uiManager.showDamage(attacker, dmg, false, null);
+                                this.uiManager.showMessage(`${rat.label} 反噬！${attacker.name} -${dmg}`, 1200);
+                                this.uiManager.updateHP(attacker);
+                            } else {
+                                this.uiManager.showMessage(`${attacker.name} 消灭 ${rat.label}！+${rat.points || 1}`, 700);
+                            }
+                            audioManager.playHitSound();
+                            this.rats.splice(i, 1);
+                        } else {
+                            MinigameRatSystem.spawnHitEffects(this, rat.x, rat.y, 'hit');
+                            audioManager.playHitSound();
+                        }
+                        return false;
+                    }
+                }
+                const margin = Math.max(120, Math.min(this.worldWidth, this.worldHeight) * 0.08);
+                if (proj.x < -margin || proj.x > this.worldWidth + margin || proj.y < -margin || proj.y > this.worldHeight + margin) {
+                    return false;
+                }
+                return proj.lifetime > 0;
+            });
+        }
+        this.updateMinigameHud();
+    }
+
+    renderRats() {
+        if (!this.isTargetPlayType() || !this.ctx) return;
+        this.ctx.save();
+        this.ctx.scale(this.renderScale || 1, this.renderScale || 1);
+        this.ctx.translate(-this.camera.x, -this.camera.y);
+        MinigameRatSystem.drawRats(this.ctx, this);
+        this.ctx.restore();
     }
 
     applyMapLayout() {
@@ -184,6 +570,8 @@ class CatClashGame {
 
         this.refreshAmbientForMap(preset);
         this.ensureSceneImageLoaded(this.selectedMap);
+        if (this.cats?.length) this.syncProjectileWorldMetrics();
+        this.applyDeviceLayout();
     }
 
     preloadSceneImages() {
@@ -254,7 +642,13 @@ class CatClashGame {
             battlePainted.addEventListener('click', () => this.setSceneBackgroundMode('painted'));
         }
         if (battlePhoto) {
-            battlePhoto.addEventListener('click', () => this.setSceneBackgroundMode('photo'));
+            battlePhoto.addEventListener('click', () => {
+                if (this.sceneBackgroundMode === 'photo') {
+                    this.cyclePhotoBackground();
+                } else {
+                    this.setSceneBackgroundMode('photo');
+                }
+            });
         }
 
         this.setSceneBackgroundMode(this.sceneBackgroundMode, true);
@@ -293,6 +687,9 @@ class CatClashGame {
                 buttons.forEach(b => b.classList.remove('selected'));
                 btn.classList.add('selected');
                 this.selectedMap = btn.dataset.map;
+                if (window.PhotoSceneGallery) {
+                    PhotoSceneGallery.setByMapId(this.selectedMap);
+                }
                 this.applyMapLayout();
             });
         });
@@ -797,7 +1194,9 @@ class CatClashGame {
 
     showMenu() {
         this.state = 'menu';
+        this.playType = this.playType || 'battle';
         this.uiManager.showScreen('menu');
+        document.body.classList.remove('minigame-mode');
         document.getElementById('game-screen')?.classList.remove('touch-battle');
 
         if (this.animationId) {
@@ -811,7 +1210,13 @@ class CatClashGame {
         this.uiManager.showScreen('battle');
         this.setSceneBackgroundMode(this.sceneBackgroundMode, true);
 
-        this.initBattle();
+        if (this.playType === 'food') {
+            this.initFoodMode();
+        } else if (this.playType === 'target') {
+            this.initTargetMode();
+        } else {
+            this.initBattle();
+        }
 
         audioManager.startBackgroundMusic();
 
@@ -819,10 +1224,19 @@ class CatClashGame {
         this.isRunning = true;
         this.gameLoop(this.lastTime);
 
-        this.uiManager.showMessage('战斗开始！', 2000);
+        const startMsg = this.playType === 'food'
+            ? '抢食物开始！90秒内吃得最多获胜'
+            : this.playType === 'target'
+                ? '打耗子开始！用暗器消灭更多耗子'
+                : '战斗开始！';
+        this.uiManager.showMessage(startMsg, 2000);
         this.updateTouchControlsVisibility();
 
-        if (this.gameMode === 'ai') {
+        if (this.isFoodPlayType()) {
+            this.uiManager.updateActionHint('90秒抢食物 · 猫草黑茶-2茉莉+2 · 塑料袋各+2');
+        } else if (this.isTargetPlayType()) {
+            this.uiManager.updateActionHint('90秒打耗子 · U/小键盘0 暗器 · 小心反噬鼠');
+        } else if (this.gameMode === 'ai') {
             this.uiManager.updateActionHint('黑茶：WASD移动 | J攻击 U暗器 | K防御 L技能');
             this.uiManager.updateDifficultyBadge(this.difficulty);
         } else {
@@ -854,31 +1268,10 @@ class CatClashGame {
     }
 
     initBattle() {
-        this.applyMapLayout();
-        const canvasWidth = this.worldWidth;
-        const canvasHeight = this.worldHeight;
-
-        this.resetBattleRuntimeState();
-
-        const spawns = this.getCatSpawnPositions();
-        const layoutScale = this.layoutMetrics?.uiScale || 1;
-        const kuro = new KuroCat(spawns.kuro.x, spawns.kuro.y, 'right', this.characterStyle);
-        const shiro = new ShiroCat(spawns.shiro.x, spawns.shiro.y, 'left', this.characterStyle);
-        kuro.applyLayoutScale(layoutScale);
-        shiro.applyLayoutScale(layoutScale);
-
-        this.cats = [kuro, shiro];
-        this.foodItems = [];
-        this.foodSpawnTimerNormal = 0;
-        this.foodSpawnTimerSpecial = 0;
-        this.heartsEffect = null;
-        this.blockedProjectileDebris = [];
-        this.touchDefendHeld = { kuro: false, shiro: false };
-        this.touchControls = {
-            kuro: { up: false, down: false, left: false, right: false },
-            shiro: { up: false, down: false, left: false, right: false }
-        };
-
+        document.body.classList.remove('playtype-food', 'playtype-target');
+        this.initCatsForSession();
+        this.foodSpawnIntervalNormal = 5000;
+        this.foodSpawnIntervalSpecial = 2500;
         if (this.battleSystem) {
             this.battleSystem.reset();
         }
@@ -954,11 +1347,14 @@ class CatClashGame {
             this.uiManager.updateRound(round, this.battleSystem.roundWins);
         };
 
-        this.uiManager.updateHP(kuro);
-        this.uiManager.updateHP(shiro);
-        this.uiManager.updateEnergy(kuro);
-        this.uiManager.updateEnergy(shiro);
+        const kuro = this.cats.find((c) => c.id === 'kuro');
+        const shiro = this.cats.find((c) => c.id === 'shiro');
+        if (kuro) this.uiManager.updateHP(kuro);
+        if (shiro) this.uiManager.updateHP(shiro);
+        if (kuro) this.uiManager.updateEnergy(kuro);
+        if (shiro) this.uiManager.updateEnergy(shiro);
         this.uiManager.updateRound(1, { kuro: 0, shiro: 0 });
+        this.updateBattleModeUI();
         
         const shiroIndicator = document.getElementById('shiro-indicator');
         if (shiroIndicator) {
@@ -1204,6 +1600,11 @@ class CatClashGame {
     }
 
     attackCat(catId) {
+        if (this.isFoodPlayType()) return;
+        if (this.isTargetPlayType()) {
+            this.fireProjectileTowardRat(catId);
+            return;
+        }
         const attacker = this.cats.find(c => c.id === catId);
         const defender = this.cats.find(c => c.id !== catId);
 
@@ -1211,6 +1612,7 @@ class CatClashGame {
 
         this.faceTarget(attacker, defender);
         audioManager.playAttackSound();
+        attacker._projectileWorldMetrics = this.getProjectileWorldMetrics();
 
         const damage = this.battleSystem.processAttack(attacker, defender);
 
@@ -1229,6 +1631,7 @@ class CatClashGame {
     }
 
     defendCat(catId, options = {}) {
+        if (this.isFoodPlayType() || this.isTargetPlayType()) return;
         const cat = this.cats.find(c => c.id === catId);
         if (!cat || cat.isDead) return;
         if (!cat.isDefending && !cat.canStartAction('defend')) return;
@@ -1253,16 +1656,24 @@ class CatClashGame {
     }
 
     fireProjectileCat(catId) {
+        if (this.isFoodPlayType()) return;
+        if (this.isTargetPlayType()) {
+            this.fireProjectileTowardRat(catId);
+            return;
+        }
         const attacker = this.cats.find(c => c.id === catId);
         const target = this.cats.find(c => c.id !== catId);
 
         if (!attacker || !target || attacker.isDead || !attacker.canStartAction('projectile')) return;
 
         audioManager.playProjectileSound();
-        attacker.fireProjectile(target);
+        const worldMetrics = this.getProjectileWorldMetrics();
+        attacker._projectileWorldMetrics = worldMetrics;
+        attacker.fireProjectile(target, worldMetrics);
     }
 
     skillCat(catId) {
+        if (this.isFoodPlayType() || this.isTargetPlayType()) return;
         const user = this.cats.find(c => c.id === catId);
         const target = this.cats.find(c => c.id !== catId);
 
@@ -1320,13 +1731,19 @@ class CatClashGame {
             cat.update(deltaTime);
         });
 
-        if (this.aiSystem && this.gameMode === 'ai') {
+        if (this.isBattlePlayType() && this.aiSystem && this.gameMode === 'ai') {
             const aiCat = this.cats.find(c => c.id === 'shiro');
             const playerCat = this.cats.find(c => c.id === 'kuro');
             if (aiCat && playerCat && !aiCat.isDead) {
                 this.aiSystem.update(aiCat, playerCat, deltaTime);
             }
+        } else if (this.isFoodPlayType() && this.gameMode === 'ai') {
+            this.updateFoodModeAI(deltaTime);
+        } else if (this.isTargetPlayType() && this.gameMode === 'ai') {
+            this.updateTargetModeAI(deltaTime);
         }
+
+        this.updateMinigameTimer(deltaTime);
 
         this.handleKeyHold();
         this.updateDefendHold();
@@ -1336,10 +1753,22 @@ class CatClashGame {
         this.checkCollision();
         this.updateRush(deltaTime);
 
-        this.updateFood(deltaTime);
-        this.checkFoodCollisions();
-        this.checkProjectileCollisions();
-        this.checkGameOverCheck();
+        if (this.isBattlePlayType() || this.isFoodPlayType()) {
+            this.updateFood(deltaTime);
+            this.checkFoodCollisions();
+        }
+        if (this.isTargetPlayType()) {
+            this.updateTargetRats(deltaTime);
+        }
+        if (this.isBattlePlayType()) {
+            this.checkProjectileCollisions();
+        }
+        if (this.isTargetPlayType()) {
+            this.checkProjectileRatCollisions();
+        }
+        if (this.isBattlePlayType()) {
+            this.checkGameOverCheck();
+        }
 
         this.uiManager.updateHP(this.cats.find(c => c.id === 'kuro'));
         this.uiManager.updateHP(this.cats.find(c => c.id === 'shiro'));
@@ -1495,6 +1924,32 @@ class CatClashGame {
         }
 
         return foodTypes[foodTypes.length - 1];
+    }
+
+
+    getFoodRushScoreDelta(cat, food) {
+        const special = food.type.special;
+        if (special === 'catgrass') {
+            return cat.id === 'kuro' ? -2 : 2;
+        }
+        if (special === 'plasticbag') {
+            return 2;
+        }
+        return 1;
+    }
+
+    getFoodRushPickupMessage(cat, food, scoreDelta) {
+        const foodName = food.type.name;
+        if (food.type.special === 'catgrass') {
+            if (cat.id === 'kuro') {
+                return `黑茶抢了猫草，抢食物 ${scoreDelta} 分`;
+            }
+            return `茉莉抢了猫草，抢食物 +${scoreDelta} 分`;
+        }
+        if (food.type.special === 'plasticbag') {
+            return `${cat.name} 抢到塑料袋，抢食物 +${scoreDelta} 分`;
+        }
+        return `${cat.name} 抢到 ${foodName}，抢食物 +${scoreDelta} 分`;
     }
 
     resolveFoodEffectForCat(cat, food) {
@@ -1668,6 +2123,34 @@ class CatClashGame {
 
                 const pickupRadius = Math.max(80, food.size * 2.2);
                 if (dist < pickupRadius) {
+                    if (this.isFoodPlayType()) {
+                        const scoreDelta = this.getFoodRushScoreDelta(cat, food);
+                        this.modeScores[cat.id] = (this.modeScores[cat.id] || 0) + scoreDelta;
+
+                        if (scoreDelta > 0) {
+                            for (let j = 0; j < 4; j++) {
+                                cat.hearts.push({
+                                    x: cat.x + cat.width / 2 + Utils.randomRange(-20, 20),
+                                    y: cat.y + cat.height / 2,
+                                    size: Utils.randomRange(12, 18),
+                                    alpha: 1,
+                                    vy: -1.2,
+                                    life: 1
+                                });
+                            }
+                        } else if (scoreDelta < 0) {
+                            audioManager.playHitSound();
+                            this.uiManager.showDamage(cat, Math.abs(scoreDelta), false, null);
+                        }
+
+                        this.playFoodPickupAudio(food.type);
+                        this.uiManager.showMessage(this.getFoodRushPickupMessage(cat, food, scoreDelta), 1600);
+                        this.uiManager.updateEnergy(cat);
+                        this.foodItems.splice(i, 1);
+                        this.updateMinigameHud();
+                        break;
+                    }
+
                     const effect = this.resolveFoodEffectForCat(cat, food);
 
                     if (effect.kind === 'heal' && effect.amount > 0) {
@@ -1848,8 +2331,7 @@ class CatClashGame {
         if (!this.ctx) return;
 
         const preset = this.mapPreset || MAP_PRESETS.sakura;
-        const usePhoto = this.sceneBackgroundMode === 'photo' &&
-            this.sceneImagesLoaded[this.selectedMap];
+        const usePhoto = this.sceneBackgroundMode === 'photo' && !!this.getPhotoBackgroundImage();
 
         if (usePhoto) {
             this.renderPhotoBackground(preset);
@@ -1881,6 +2363,7 @@ class CatClashGame {
 
         this.renderRushTrails();
         this.renderFood();
+        this.renderRats();
         this.renderCats();
         this.renderAllProjectiles();
         this.renderBlockedProjectileDebris(this.ctx);
@@ -1890,20 +2373,21 @@ class CatClashGame {
     }
 
     renderPhotoBackground(preset) {
-        const img = this.sceneImages[this.selectedMap];
+        const img = this.getPhotoBackgroundImage();
         if (!img || !img.complete) {
             this.renderBackground();
             return;
         }
 
-        const iw = img.naturalWidth || img.width;
-        const ih = img.naturalHeight || img.height;
-        const scale = Math.max(this.canvas.width / iw, this.canvas.height / ih);
-        const dw = iw * scale;
-        const dh = ih * scale;
-        const dx = (this.canvas.width - dw) / 2;
-        const dy = (this.canvas.height - dh) / 2;
-
+        const iw = Math.max(1, img.naturalWidth || img.width);
+        const ih = Math.max(1, img.naturalHeight || img.height);
+        const sw = this.canvas.width;
+        const sh = this.canvas.height;
+        const coverScale = Math.max(sw / iw, sh / ih);
+        const dw = iw * coverScale;
+        const dh = ih * coverScale;
+        const dx = (sw - dw) / 2;
+        const dy = (sh - dh) / 2;
         this.ctx.drawImage(img, dx, dy, dw, dh);
 
         const shade = this.ctx.createLinearGradient(0, 0, 0, this.canvas.height);

@@ -386,20 +386,26 @@ class Cat {
             this.energy = Math.min(this.maxEnergy, this.energy + 3);
             return attackResult;
         } else {
-            this.fireProjectile(target);
+            this.fireProjectile(target, this._projectileWorldMetrics);
         }
 
         return null;
     }
 
-    fireProjectile(target) {
+    fireProjectile(target, worldMetrics = {}) {
         const startX = this.x + this.width / 2;
         const startY = this.y + this.height / 2;
         const targetX = target.x + target.width / 2;
         const targetY = target.y + target.height / 2;
 
         const angle = Math.atan2(targetY - startY, targetX - startX);
-        const speed = 9 * this.layoutScale;
+        const mapScale = worldMetrics.mapScale || 1;
+        const worldWidth = worldMetrics.worldWidth || 1200;
+        const worldHeight = worldMetrics.worldHeight || 800;
+        const travelDist = Math.hypot(targetX - startX, targetY - startY);
+        const worldDiag = Math.hypot(worldWidth, worldHeight);
+        const speed = 10 * this.layoutScale * Math.max(1, Math.sqrt(mapScale));
+        const lifetime = Math.ceil((Math.max(travelDist, worldDiag) / speed) * 1.35) + 90;
 
         if (this.id === 'kuro') {
             this.projectiles.push({
@@ -409,7 +415,7 @@ class Cat {
                 vy: Math.sin(angle) * speed,
                 damage: Math.floor(Math.random() * 4) + 3,
                 targetId: target.id,
-                lifetime: 200,
+                lifetime,
                 type: 'shuriken',
                 rotation: 0,
                 color: '#4B0082',
@@ -423,7 +429,7 @@ class Cat {
                 vy: Math.sin(angle) * speed,
                 damage: Math.floor(Math.random() * 5) + 2,
                 targetId: target.id,
-                lifetime: 200,
+                lifetime,
                 type: 'star',
                 rotation: 0,
                 color: '#FFD700',
@@ -433,11 +439,12 @@ class Cat {
     }
 
     updateProjectiles(deltaTime) {
+        const step = Math.max(0.25, Math.min(2.5, (deltaTime || 16) / 16.67));
         this.projectiles = this.projectiles.filter(proj => {
-            proj.x += proj.vx;
-            proj.y += proj.vy;
-            proj.lifetime--;
-            proj.rotation += proj.type === 'shuriken' ? 0.3 : 0.2;
+            proj.x += proj.vx * step;
+            proj.y += proj.vy * step;
+            proj.lifetime -= step;
+            proj.rotation += (proj.type === 'shuriken' ? 0.3 : 0.2) * step;
 
             proj.trail.push({ x: proj.x, y: proj.y, alpha: 1 });
             if (proj.trail.length > 12) {
@@ -452,7 +459,7 @@ class Cat {
     checkProjectileHits(target, worldWidth, worldHeight) {
         const hits = [];
         const hitRadius = 55 * this.layoutScale;
-        const margin = 80;
+        const margin = Math.max(120, Math.min(worldWidth, worldHeight) * 0.08);
 
         this.projectiles = this.projectiles.filter(proj => {
             const dist = Utils.distance(proj.x, proj.y, target.x + target.width / 2, target.y + target.height / 2);

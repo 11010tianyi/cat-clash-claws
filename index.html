@@ -39,7 +39,7 @@
                 </div>
                 
                 <div class="difficulty-section">
-                    <h3 class="difficulty-title">🌸 选择难度 🌸</h3>
+                    <h3 class="difficulty-title">🌸 选择难度</h3>
                     <div class="difficulty-buttons">
                         <button class="difficulty-btn easy" data-difficulty="easy">
                             🐱 萌新
@@ -52,7 +52,30 @@
                         </button>
                     </div>
                 </div>
-                
+
+                <button type="button" class="menu-advanced-toggle" id="menu-advanced-toggle" aria-expanded="false">
+                    展开更多选项 ▼
+                </button>
+
+                <div class="menu-advanced-panel" id="menu-advanced-panel">
+                <div class="playtype-section">
+                    <h3 class="playtype-title">🎯 玩法类型</h3>
+                    <div class="playtype-buttons">
+                        <button type="button" class="playtype-btn battle selected" data-playtype="battle">
+                            ⚔️ 猫猫对战
+                            <span class="playtype-desc">三局两胜（默认）</span>
+                        </button>
+                        <button type="button" class="playtype-btn food" data-playtype="food">
+                            🍖 抢食物
+                            <span class="playtype-desc">90秒 · 吃得最多赢</span>
+                        </button>
+                        <button type="button" class="playtype-btn target" data-playtype="target">
+                            🎯 打耗子
+                            <span class="playtype-desc">90秒 · 暗器打移动靶</span>
+                        </button>
+                    </div>
+                </div>
+
                 <div class="style-section">
                     <h3 class="style-title">🎨 角色形象</h3>
                     <div class="style-buttons">
@@ -75,6 +98,7 @@
                             📸 真实场景
                         </button>
                     </div>
+                    <p class="scene-hint">真实场景固定铺满屏幕；点「📸」可换一张图（不滚动）</p>
                 </div>
 
                 <div class="map-section">
@@ -161,18 +185,19 @@
                         </div>
                     </div>
                 </div>
-                
-                <button class="btn-start" onclick="game.start()">
-                    <span class="btn-text">开始战斗</span>
-                    <span class="btn-sparkle">✨</span>
-                </button>
 
                 <button class="btn-mute" id="btn-mute" onclick="toggleMute()">
                     <span id="mute-icon">🔊</span>
                     <span id="mute-text">开启音效</span>
                 </button>
-                
-                <div class="controls-hint">
+                </div>
+
+                <button class="btn-start" onclick="game.start()">
+                    <span class="btn-text">开始战斗</span>
+                    <span class="btn-sparkle">✨</span>
+                </button>
+
+<div class="controls-hint">
                     <div class="hint-section">
                         <h4>🖤 黑茶操作</h4>
                         <p>W A S D 移动 | J 攻击 | U 暗器 | K 防御 | L 技能</p>
@@ -183,9 +208,6 @@
                     </div>
                 </div>
                 
-                <div class="touch-hint">
-                    <p>📱 触屏设备：点击底部按钮进行操作</p>
-                </div>
             </div>
         </div>
 
@@ -443,6 +465,8 @@
     <script src="js/ui.js"></script>
     <script src="js/ai.js"></script>
     <script src="js/maps.js"></script>
+    <script src="js/photo-scenes.js"></script>
+    <script src="js/minigames.js"></script>
     <script src="js/scenery.js"></script>
     <script src="js/game.js"></script>
 
