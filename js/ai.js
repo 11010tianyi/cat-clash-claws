@@ -15,7 +15,7 @@ class CatAI {
             case 'medium':
                 return 400;
             case 'hard':
-                return 150;
+                return 85;
             default:
                 return 400;
         }
@@ -28,7 +28,7 @@ class CatAI {
             case 'medium':
                 return 40;
             case 'hard':
-                return 20;
+                return 11;
             default:
                 return 40;
         }
@@ -108,7 +108,17 @@ class CatAI {
             action = randomActions[Math.floor(Math.random() * randomActions.length)];
         }
 
-        if (this.difficulty === 'hard' && targetHpRatio < 0.3) {
+        if (this.difficulty === 'hard' && distance < 240 && aiCat.attackCooldown <= 0 && Math.random() > 0.2) {
+            action = 'attack';
+            priority = Math.max(priority, 10);
+        }
+
+        if (this.difficulty === 'hard' && distance > 220 && distance < 480 && energyRatio >= 0.12 && Math.random() > 0.35) {
+            action = 'projectile';
+            priority = Math.max(priority, 9);
+        }
+
+        if (this.difficulty === 'hard' && targetHpRatio < 0.35) {
             if (distance > 200) {
                 if (Math.random() > 0.5) {
                     action = 'projectile';

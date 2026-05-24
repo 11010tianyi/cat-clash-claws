@@ -284,7 +284,7 @@ class CatClashGame {
         }
         if (hints.length >= 2) {
             if (this.playType === 'food') {
-                hints[0].textContent = 'W A S D 移动 | 猫草黑茶-2茉莉+2 塑料袋各+2（90秒）';
+                hints[0].textContent = 'W A S D 移动 | 猫草黑茶-2茉莉+2 塑料袋黑茶+2茉莉-2（90秒）';
                 hints[1].textContent = '方向键移动 | 普通食物+1分，得分高者胜';
             } else if (this.playType === 'target') {
                 hints[0].textContent = 'W A S D 移动 | U 暗器打耗子（J 也会发射暗器）';
@@ -414,24 +414,89 @@ class CatClashGame {
         }, 800);
     }
 
+    getFoodModeAIParams() {
+        // 抢食物：挑战(medium) 难度偏弱；大师(hard) 仍具压迫感
+        switch (this.difficulty) {
+            case 'easy':
+                return { speedMult: 0.48, hesitate: 0.2, wander: 0.28 };
+            case 'medium':
+                return { speedMult: 0.56, hesitate: 0.16, wander: 0.14 };
+            case 'hard':
+                return { speedMult: 0.9, hesitate: 0.04, wander: 0.06 };
+            default:
+                return { speedMult: 0.62, hesitate: 0.12, wander: 0.16 };
+        }
+    }
+
+    pickFoodRushTargetForCat(cat) {
+        const cx = cat.x + cat.width / 2;
+        const cy = cat.y + cat.height / 2;
+        let bestFood = null;
+        let bestUtility = -Infinity;
+
+        for (const food of this.foodItems) {
+            const scoreDelta = this.getFoodRushScoreDelta(cat, food);
+            if (scoreDelta <= 0) continue;
+
+            const dist = Math.hypot(food.x - cx, food.y - cy);
+            const utility = scoreDelta * 1200 / (dist + 90);
+            if (utility > bestUtility) {
+                bestUtility = utility;
+                bestFood = food;
+            }
+        }
+
+        return bestFood;
+    }
+
+    pickFoodRushAvoidTargetForCat(cat) {
+        const cx = cat.x + cat.width / 2;
+        const cy = cat.y + cat.height / 2;
+        let worst = null;
+        let worstUtility = -Infinity;
+
+        for (const food of this.foodItems) {
+            const scoreDelta = this.getFoodRushScoreDelta(cat, food);
+            if (scoreDelta >= 0) continue;
+
+            const dist = Math.hypot(food.x - cx, food.y - cy);
+            const threat = Math.abs(scoreDelta) * 1200 / (dist + 60);
+            if (threat > worstUtility) {
+                worstUtility = threat;
+                worst = food;
+            }
+        }
+
+        return worst;
+    }
+
     updateFoodModeAI(deltaTime) {
         const aiCat = this.cats.find((c) => c.id === 'shiro');
         if (!aiCat || aiCat.isDead) return;
+        const params = this.getFoodModeAIParams();
+        if (Math.random() < params.hesitate) return;
+
         const cx = aiCat.x + aiCat.width / 2;
         const cy = aiCat.y + aiCat.height / 2;
-        let nearest = null;
-        let best = Infinity;
-        for (const food of this.foodItems) {
-            const d = Math.hypot(food.x - cx, food.y - cy);
-            if (d < best) { best = d; nearest = food; }
-        }
-        const ms = this.NORMAL_MOVE_SPEED * 0.85;
-        if (nearest) {
-            if (nearest.x > cx + 8) this.moveCat('shiro', ms, 0);
-            else if (nearest.x < cx - 8) this.moveCat('shiro', -ms, 0);
-            if (nearest.y > cy + 8) this.moveCat('shiro', 0, ms);
-            else if (nearest.y < cy - 8) this.moveCat('shiro', 0, -ms);
-        } else {
+        const target = this.pickFoodRushTargetForCat(aiCat);
+        const avoid = !target ? this.pickFoodRushAvoidTargetForCat(aiCat) : null;
+        const ms = this.NORMAL_MOVE_SPEED * params.speedMult;
+
+        const moveToward = (fx, fy) => {
+            if (fx > cx + 8) this.moveCat('shiro', ms, 0);
+            else if (fx < cx - 8) this.moveCat('shiro', -ms, 0);
+            if (fy > cy + 8) this.moveCat('shiro', 0, ms);
+            else if (fy < cy - 8) this.moveCat('shiro', 0, -ms);
+        };
+
+        if (target) {
+            moveToward(target.x, target.y);
+        } else if (avoid) {
+            const dx = cx - avoid.x;
+            const dy = cy - avoid.y;
+            const len = Math.hypot(dx, dy) || 1;
+            this.moveCat('shiro', (dx / len) * ms, (dy / len) * ms);
+        } else if (Math.random() < params.wander) {
             this.moveCat('shiro', (Math.random() - 0.5) * ms * 2, (Math.random() - 0.5) * ms * 2);
         }
     }
@@ -1211,8 +1276,10 @@ class CatClashGame {
         this.setSceneBackgroundMode(this.sceneBackgroundMode, true);
 
         if (this.playType === 'food') {
+            document.body.classList.add('minigame-mode');
             this.initFoodMode();
         } else if (this.playType === 'target') {
+            document.body.classList.add('minigame-mode');
             this.initTargetMode();
         } else {
             this.initBattle();
@@ -1233,9 +1300,11 @@ class CatClashGame {
         this.updateTouchControlsVisibility();
 
         if (this.isFoodPlayType()) {
-            this.uiManager.updateActionHint('90秒抢食物 · 猫草黑茶-2茉莉+2 · 塑料袋各+2');
+            this.uiManager.updateActionHint('90秒抢食物 · 猫草黑茶-2茉莉+2 · 塑料袋黑茶+2茉莉-2');
+            if (this.gameMode === 'ai') this.uiManager.updateDifficultyBadge(this.difficulty);
         } else if (this.isTargetPlayType()) {
             this.uiManager.updateActionHint('90秒打耗子 · U/小键盘0 暗器 · 小心反噬鼠');
+            if (this.gameMode === 'ai') this.uiManager.updateDifficultyBadge(this.difficulty);
         } else if (this.gameMode === 'ai') {
             this.uiManager.updateActionHint('黑茶：WASD移动 | J攻击 U暗器 | K防御 L技能');
             this.uiManager.updateDifficultyBadge(this.difficulty);
@@ -1268,7 +1337,7 @@ class CatClashGame {
     }
 
     initBattle() {
-        document.body.classList.remove('playtype-food', 'playtype-target');
+        document.body.classList.remove('minigame-mode', 'playtype-food', 'playtype-target');
         this.initCatsForSession();
         this.foodSpawnIntervalNormal = 5000;
         this.foodSpawnIntervalSpecial = 2500;
@@ -1933,7 +2002,7 @@ class CatClashGame {
             return cat.id === 'kuro' ? -2 : 2;
         }
         if (special === 'plasticbag') {
-            return 2;
+            return cat.id === 'kuro' ? 2 : -2;
         }
         return 1;
     }
@@ -1947,7 +2016,10 @@ class CatClashGame {
             return `茉莉抢了猫草，抢食物 +${scoreDelta} 分`;
         }
         if (food.type.special === 'plasticbag') {
-            return `${cat.name} 抢到塑料袋，抢食物 +${scoreDelta} 分`;
+            if (cat.id === 'kuro') {
+                return `${cat.name} 抢到塑料袋，抢食物 +${scoreDelta} 分`;
+            }
+            return `茉莉抢到塑料袋，抢食物 ${scoreDelta} 分`;
         }
         return `${cat.name} 抢到 ${foodName}，抢食物 +${scoreDelta} 分`;
     }
