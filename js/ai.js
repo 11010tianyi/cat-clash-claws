@@ -2,7 +2,7 @@ class CatAI {
     constructor(difficulty = 'medium') {
         this.difficulty = difficulty;
         this.reactionDelay = this.getReactionDelay();
-        this.decisionCooldown = 0;
+        this.decisionCooldown = this.reactionDelay / 16.67;
         this.cooldownMax = this.getCooldownMax();
         this.lastAction = null;
         this.targetPosition = null;
@@ -13,40 +13,54 @@ class CatAI {
             case 'easy':
                 return 800;
             case 'medium':
-                return 400;
+                return 280;
             case 'hard':
                 return 85;
             default:
-                return 400;
+                return 280;
         }
     }
 
     getCooldownMax() {
         switch (this.difficulty) {
             case 'easy':
-                return 60;
+                return 28;
             case 'medium':
-                return 40;
+                return 16;
             case 'hard':
-                return 11;
+                return 10;
             default:
-                return 40;
+                return 16;
+        }
+    }
+
+    getMoveParams() {
+        switch (this.difficulty) {
+            case 'easy':
+                return { speedMult: 0.62, hesitate: 0.14, projectileChance: 0.55 };
+            case 'medium':
+                return { speedMult: 0.88, hesitate: 0.04, projectileChance: 0.85 };
+            case 'hard':
+                return { speedMult: 1.05, hesitate: 0.02, projectileChance: 0.95 };
+            default:
+                return { speedMult: 0.88, hesitate: 0.04, projectileChance: 0.85 };
         }
     }
 
     update(aiCat, target, deltaTime) {
+        if (!aiCat || aiCat.isDead || aiCat.isDying || !target || target.isDead || target.isDying) return;
+
+        const step = Math.max(0.25, Math.min(2.5, (deltaTime || 16.67) / 16.67));
+        this.chase(aiCat, target, step);
+
         if (this.decisionCooldown > 0) {
-            this.decisionCooldown -= deltaTime / 16.67;
+            this.decisionCooldown -= step;
             return;
         }
 
         const decision = this.makeDecision(aiCat, target);
-        
-        if (decision.action) {
-            this.executeAction(decision, aiCat, target);
-            this.lastAction = decision.action;
-        }
-        
+        this.executeAction(decision, aiCat, target);
+        this.lastAction = decision.action;
         this.decisionCooldown = this.cooldownMax;
     }
 
@@ -57,172 +71,112 @@ class CatAI {
             target.x + target.width / 2,
             target.y + target.height / 2
         );
-
+        const melee = 220 * (aiCat.layoutScale || 1);
         const hpRatio = aiCat.hp / aiCat.maxHp;
         const targetHpRatio = target.hp / target.maxHp;
-        const energyRatio = aiCat.energy / aiCat.maxEnergy;
+        const params = this.getMoveParams();
+        const candidates = [];
 
-        let action = null;
-        let priority = 0;
-
-        if (hpRatio < 0.3 && !aiCat.isDefending && Math.random() > 0.3) {
-            action = 'defend';
-            priority = 10;
+        if (hpRatio < 0.28 && !aiCat.isDefending && Math.random() < 0.45) {
+            candidates.push({ action: 'defend', priority: 6 });
         }
 
-        if (distance < 220 && aiCat.attackCooldown <= 0) {
-            const attackPriority = 5 + (1 - targetHpRatio) * 5;
-            if (attackPriority > priority) {
-                action = 'attack';
-                priority = attackPriority;
-            }
+        if (distance > melee && aiCat.energy >= 10 && Math.random() < params.projectileChance) {
+            const priority = this.difficulty === 'hard' ? 8 : 7;
+            candidates.push({ action: 'projectile', priority });
         }
 
-        if (distance > 280 && Math.random() > 0.4 && energyRatio >= 0.2) {
-            action = 'projectile';
-            priority = 7;
+        if (distance <= melee + 40 && aiCat.attackCooldown <= 0) {
+            candidates.push({
+                action: 'attack',
+                priority: 9 + (1 - targetHpRatio) * 2
+            });
         }
 
-        if (distance > 300 && !aiCat.isAttacking) {
-            action = 'approach';
-            priority = 4;
+        if (distance < 280 * (aiCat.layoutScale || 1) && aiCat.energy >= 35 && aiCat.skillCooldown <= 0) {
+            candidates.push({ action: 'skill', priority: distance < melee ? 5 : 4 });
         }
 
-        if (distance < 250 && energyRatio >= 0.3 && aiCat.skillCooldown <= 0) {
-            if (aiCat.skillEffect === 'defend' && hpRatio < 0.5) {
-                action = 'skill';
-                priority = 8;
-            } else if (aiCat.skillEffect !== 'defend') {
-                action = 'skill';
-                priority = 6;
-            }
+        if (distance > melee * 0.85) {
+            candidates.push({ action: 'approach', priority: 3 });
         }
 
-        if (distance < 180 && hpRatio > targetHpRatio && aiCat.energy >= 30 && aiCat.skillCooldown <= 0) {
-            action = 'skill';
-            priority = 9;
+        if (candidates.length === 0) {
+            return { action: 'idle', priority: 0 };
         }
 
-        if (this.difficulty === 'easy' && Math.random() > 0.5) {
-            const randomActions = ['approach', 'retreat', 'idle'];
-            action = randomActions[Math.floor(Math.random() * randomActions.length)];
-        }
-
-        if (this.difficulty === 'hard' && distance < 240 && aiCat.attackCooldown <= 0 && Math.random() > 0.2) {
-            action = 'attack';
-            priority = Math.max(priority, 10);
-        }
-
-        if (this.difficulty === 'hard' && distance > 220 && distance < 480 && energyRatio >= 0.12 && Math.random() > 0.35) {
-            action = 'projectile';
-            priority = Math.max(priority, 9);
-        }
-
-        if (this.difficulty === 'hard' && targetHpRatio < 0.35) {
-            if (distance > 200) {
-                if (Math.random() > 0.5) {
-                    action = 'projectile';
-                    priority = 12;
-                } else {
-                    action = 'approach';
-                    priority = 11;
-                }
-            } else if (aiCat.attackCooldown <= 0) {
-                action = 'attack';
-                priority = 12;
-            }
-        }
-
-        if (!action) {
-            action = 'idle';
-        }
-
-        return { action, priority };
+        candidates.sort((a, b) => b.priority - a.priority);
+        return candidates[0];
     }
 
     executeAction(decision, aiCat, target) {
-        setTimeout(() => {
-            if (aiCat.isDead) return;
+        if (!decision || aiCat.isDead || aiCat.isDying) return;
 
-            switch (decision.action) {
-                case 'attack':
-                    this.performAttack(aiCat, target);
-                    break;
-                case 'defend':
-                    this.performDefend(aiCat);
-                    break;
-                case 'skill':
-                    this.performSkill(aiCat, target);
-                    break;
-                case 'projectile':
-                    this.performProjectile(aiCat, target);
-                    break;
-                case 'approach':
-                    this.moveTowardsTarget(aiCat, target);
-                    break;
-                case 'retreat':
-                    this.moveAwayFromTarget(aiCat, target);
-                    break;
-                case 'idle':
-                default:
-                    break;
-            }
-        }, this.reactionDelay);
+        switch (decision.action) {
+            case 'attack':
+                this.performAttack(aiCat, target);
+                break;
+            case 'defend':
+                this.performDefend(aiCat);
+                break;
+            case 'skill':
+                this.performSkill(aiCat, target);
+                break;
+            case 'projectile':
+                this.performProjectile(aiCat, target);
+                break;
+            case 'approach':
+            case 'retreat':
+            case 'idle':
+            default:
+                break;
+        }
     }
 
     performAttack(aiCat, target) {
-        if (!aiCat.isDead && aiCat.attackCooldown <= 0) {
+        if (!aiCat.isDead && !aiCat.isDying && !target?.isDead && !target?.isDying && aiCat.attackCooldown <= 0) {
             game.attackCat('shiro');
         }
     }
 
     performDefend(aiCat) {
-        if (!aiCat.isDead && !aiCat.isDefending) {
+        if (!aiCat.isDead && !aiCat.isDying && !aiCat.isDefending) {
             game.defendCat('shiro');
             setTimeout(() => {
-                if (!aiCat.isDead) {
+                if (!aiCat.isDead && !aiCat.isDying) {
                     aiCat.releaseDefend();
                 }
-            }, 600 + Math.random() * 500);
+            }, 420 + Math.random() * 280);
         }
     }
 
     performSkill(aiCat, target) {
-        if (!aiCat.isDead && aiCat.energy >= 30 && aiCat.skillCooldown <= 0) {
+        if (!aiCat.isDead && !aiCat.isDying && !target?.isDying && aiCat.energy >= 35 && aiCat.skillCooldown <= 0) {
             game.skillCat('shiro');
         }
     }
 
     performProjectile(aiCat, target) {
-        if (!aiCat.isDead && aiCat.energy >= 10) {
+        if (!aiCat.isDead && !aiCat.isDying && !target?.isDead && !target?.isDying && aiCat.energy >= 10) {
             game.fireProjectileCat('shiro');
         }
     }
 
-    moveTowardsTarget(aiCat, target) {
-        if (!aiCat.isDead && !aiCat.isAttacking) {
-            const dx = target.x - aiCat.x;
-            const dy = target.y - aiCat.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance > 150) {
-                const step = game.NORMAL_MOVE_SPEED;
-                game.moveCat('shiro', Math.sign(dx) * step, Math.sign(dy) * step);
-            }
-        }
-    }
+    chase(aiCat, target, step) {
+        if (!aiCat || aiCat.isDead || aiCat.isDying || !target || target.isDead) return;
+        if (!game || game.rushingCats?.[aiCat.id]?.active) return;
 
-    moveAwayFromTarget(aiCat, target) {
-        if (!aiCat.isDead && !aiCat.isAttacking) {
-            const dx = aiCat.x - target.x;
-            const dy = aiCat.y - target.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance < 200) {
-                const step = game.NORMAL_MOVE_SPEED;
-                game.moveCat('shiro', Math.sign(dx) * step, Math.sign(dy) * step);
-            }
-        }
+        const params = this.getMoveParams();
+        if (Math.random() < params.hesitate) return;
+
+        const dx = target.x - aiCat.x;
+        const dy = target.y - aiCat.y;
+        const distance = Math.hypot(dx, dy);
+        const hold = 130 * (aiCat.layoutScale || 1);
+        if (distance <= hold) return;
+
+        const speed = (game.NORMAL_MOVE_SPEED || 3) * params.speedMult * step;
+        game.moveCat(aiCat.id, (dx / distance) * speed, (dy / distance) * speed);
     }
 }
 

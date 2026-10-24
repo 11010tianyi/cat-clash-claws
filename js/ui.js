@@ -157,6 +157,28 @@ class UIManager {
         }
     }
 
+    worldToScreen(cat, yOffset = 0) {
+        const cam = window.game?.camera || { x: 0, y: 0 };
+        const scale = window.game?.renderScale || 1;
+        const width = cat.width || 0;
+        return {
+            x: (cat.x - cam.x + width / 2) * scale,
+            y: (cat.y - cam.y + yOffset) * scale
+        };
+    }
+
+    showFloatText(cat, text, className = 'dodge') {
+        if (!this.elements.damageNumbers || !cat) return;
+        const el = document.createElement('div');
+        el.className = `damage-popup ${className}`;
+        el.textContent = text;
+        const pos = this.worldToScreen(cat, -24);
+        el.style.left = `${pos.x}px`;
+        el.style.top = `${pos.y}px`;
+        this.elements.damageNumbers.appendChild(el);
+        setTimeout(() => el.remove(), 1200);
+    }
+
     showDamage(cat, amount, isCritical = false, attackResult = null) {
         if (!this.elements.damageNumbers) return;
         
@@ -175,12 +197,9 @@ class UIManager {
         }
         damageEl.textContent = text;
         
-        const cam = window.game?.camera || { x: 0, y: 0 };
-        const catX = cat.x - cam.x + cat.width / 2;
-        const catY = cat.y - cam.y;
-        
-        damageEl.style.left = `${catX}px`;
-        damageEl.style.top = `${catY}px`;
+        const pos = this.worldToScreen(cat);
+        damageEl.style.left = `${pos.x}px`;
+        damageEl.style.top = `${pos.y}px`;
         
         this.elements.damageNumbers.appendChild(damageEl);
         
@@ -196,12 +215,9 @@ class UIManager {
         dodgeEl.className = 'damage-popup dodge';
         dodgeEl.textContent = '闪避!';
         
-        const cam = window.game?.camera || { x: 0, y: 0 };
-        const catX = cat.x - cam.x + cat.width / 2;
-        const catY = cat.y - cam.y;
-        
-        dodgeEl.style.left = `${catX}px`;
-        dodgeEl.style.top = `${catY}px`;
+        const pos = this.worldToScreen(cat);
+        dodgeEl.style.left = `${pos.x}px`;
+        dodgeEl.style.top = `${pos.y}px`;
         
         this.elements.damageNumbers.appendChild(dodgeEl);
         
@@ -217,12 +233,9 @@ class UIManager {
         comboEl.className = 'damage-popup combo';
         comboEl.textContent = `COMBO x${combo}!`;
         
-        const cam = window.game?.camera || { x: 0, y: 0 };
-        const catX = cat.x - cam.x + cat.width / 2;
-        const catY = cat.y - cam.y - 60;
-        
-        comboEl.style.left = `${catX}px`;
-        comboEl.style.top = `${catY}px`;
+        const pos = this.worldToScreen(cat, -60);
+        comboEl.style.left = `${pos.x}px`;
+        comboEl.style.top = `${pos.y}px`;
         
         this.elements.damageNumbers.appendChild(comboEl);
         
@@ -238,11 +251,9 @@ class UIManager {
         healEl.className = 'damage-popup heal';
         healEl.textContent = `+${amount}`;
         
-        const catX = cat.x + cat.width / 2;
-        const catY = cat.y;
-        
-        healEl.style.left = `${catX}px`;
-        healEl.style.top = `${catY}px`;
+        const pos = this.worldToScreen(cat);
+        healEl.style.left = `${pos.x}px`;
+        healEl.style.top = `${pos.y}px`;
         
         this.elements.damageNumbers.appendChild(healEl);
         
@@ -442,12 +453,9 @@ class UIManager {
         dialogEl.className = `cat-dialog ${cat.id === 'kuro' ? 'kuro-dialog' : 'shiro-dialog'}`;
         dialogEl.textContent = text;
 
-        const cam = window.game?.camera || { x: 0, y: 0 };
-        const catX = cat.x - cam.x + cat.width / 2;
-        const catY = cat.y - cam.y - 20;
-
-        dialogEl.style.left = `${catX}px`;
-        dialogEl.style.top = `${catY}px`;
+        const pos = this.worldToScreen(cat, -20);
+        dialogEl.style.left = `${pos.x}px`;
+        dialogEl.style.top = `${pos.y}px`;
         dialogEl.style.transform = 'translate(-50%, -100%)';
 
         this.elements.damageNumbers.appendChild(dialogEl);
