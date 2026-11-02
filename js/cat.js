@@ -605,23 +605,6 @@ class Cat {
             if (!this.isDead) this.state = 'idle';
         }, 700);
 
-        if (this.id === 'shiro') {
-            const distance = Utils.distance(
-                this.x + this.width / 2,
-                this.y + this.height / 2,
-                target.x + target.width / 2,
-                target.y + target.height / 2
-            );
-
-            const skillRange = 280 * this.layoutScale;
-            if (distance < skillRange) {
-                const damage = this.calculateDamage(this.attack * this.skillDamage, target, true);
-                return { type: 'damage', value: damage };
-            }
-
-            return { type: 'miss' };
-        }
-
         const distance = Utils.distance(
             this.x + this.width / 2,
             this.y + this.height / 2,
@@ -631,8 +614,9 @@ class Cat {
 
         const skillRange = 280 * this.layoutScale;
         if (distance < skillRange) {
-            const damage = this.calculateDamage(this.attack * this.skillDamage, target, true);
-            return { type: 'damage', value: damage };
+            const isCritical = Math.random() < this.critChance;
+            const damage = this.calculateDamage(this.attack * this.skillDamage, target, isCritical);
+            return { type: 'damage', value: damage, critical: isCritical };
         }
 
         return { type: 'miss' };
@@ -662,6 +646,11 @@ class Cat {
     }
 
     takeDamage(amount, attacker, options = {}) {
+        if (this.isDead || this.isDying) return 0;
+        const battle = window.game?.battleSystem;
+        if (battle && battle.isBattleActive === false) return 0;
+        if (window.game?.cats?.some((cat) => cat.isDying)) return 0;
+
         const damageKind = options.damageKind || 'melee';
         let mitigated = 0;
 
@@ -728,6 +717,10 @@ class Cat {
             this.beginDeathAnimation();
         } else {
             this.tryHitDialog();
+        }
+
+        if (typeof window.game?.clampCatToWorld === 'function') {
+            window.game.clampCatToWorld(this);
         }
 
         return amount;

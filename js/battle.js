@@ -81,8 +81,12 @@ class BattleSystem {
         }
     }
 
+    isCombatLocked() {
+        return !this.isBattleActive || this.cats.some((cat) => cat.isDying);
+    }
+
     processAttack(attacker, defender) {
-        if (!this.isBattleActive || attacker.isDead || defender.isDead) return null;
+        if (this.isCombatLocked() || attacker.isDead || attacker.isDying || defender.isDead || defender.isDying) return null;
 
         const attackResult = attacker.attackTarget(defender);
 
@@ -115,7 +119,7 @@ class BattleSystem {
     }
 
     processSkill(user, target) {
-        if (!this.isBattleActive || user.isDead) return null;
+        if (this.isCombatLocked() || user.isDead || user.isDying || target?.isDead || target?.isDying) return null;
         if (user.energy < 35) {
             this.logAction(`${user.name} 的能量不足，无法使用技能！`);
             return null;
@@ -128,7 +132,7 @@ class BattleSystem {
                 const actualDamage = target.takeDamage(result.damage, user, { damageKind: 'skill' });
 
                 if (this.onDamage) {
-                    this.onDamage(user, target, actualDamage, true);
+                    this.onDamage(user, target, actualDamage, !!result.critical);
                 }
 
                 if (this.onHeal) {
@@ -145,11 +149,14 @@ class BattleSystem {
             } else if (result.type === 'damage') {
                 const actualDamage = target.takeDamage(result.value, user, { damageKind: 'skill' });
 
-                if (this.onDamage) {
-                    this.onDamage(user, target, actualDamage, true);
+                if (actualDamage > 0 && this.onDamage) {
+                    this.onDamage(user, target, actualDamage, !!result.critical);
                 }
 
-                this.logAction(`${user.name} 使用了 ${user.skillName}，造成了 ${actualDamage} 点伤害！`);
+                const critNote = result.critical ? '（暴击）' : '';
+                this.logAction(`${user.name} 使用了 ${user.skillName}，造成了 ${actualDamage} 点伤害！${critNote}`);
+            } else if (result.type === 'miss') {
+                this.logAction(`${user.name} 的${user.skillName}打空了！`);
             } else if (result.type === 'buff') {
                 this.logAction(`${user.name} 使用了 ${user.skillName}，防御力大幅提升！`);
             }
@@ -237,12 +244,19 @@ class BattleSystem {
 
         if (aliveCats.length === 0) {
             this.isBattleActive = false;
-            
-            if (this.onBattleEnd) {
-                this.onBattleEnd(null);
+            this.logAction(`第 ${this.currentRound} 局平局：双方同时倒下，比分不变`);
+
+            if (this.onRoundEnd) {
+                this.onRoundEnd(null, this.currentRound, { ...this.roundWins });
             }
 
-            this.logAction('平局！');
+            this.isTransitioningRound = true;
+            this.clearRoundEndTimeout();
+            this.roundEndTimeout = setTimeout(() => {
+                this.roundEndTimeout = null;
+                this.isTransitioningRound = false;
+                this.startNextRound();
+            }, 2800);
             return null;
         }
 

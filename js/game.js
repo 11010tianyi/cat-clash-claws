@@ -590,11 +590,7 @@ class CatClashGame {
 
     renderRats() {
         if (!this.isTargetPlayType() || !this.ctx) return;
-        this.ctx.save();
-        this.ctx.scale(this.renderScale || 1, this.renderScale || 1);
-        this.ctx.translate(-this.camera.x, -this.camera.y);
         MinigameRatSystem.drawRats(this.ctx, this);
-        this.ctx.restore();
     }
 
     applyMapLayout() {
@@ -1382,6 +1378,9 @@ class CatClashGame {
             } else if (result && result.type === 'damage') {
                 this.uiManager.updateHP(target);
                 this.uiManager.showMessage(`${user.name} 使用技能！⚡`, 1000);
+            } else if (result && result.type === 'miss') {
+                this.uiManager.showMessage(`${user.name} 的技能打空了！`, 1000);
+                this.uiManager.showFloatText(user, '打空!');
             }
         };
 
@@ -1407,7 +1406,10 @@ class CatClashGame {
         this.battleSystem.onRoundEnd = (winner, round, roundWins) => {
             this.rushingCats = {};
             this.rushTrails = [];
-            const message = `第 ${round} 局结束：${winner.name} 获胜！\n当前比分：黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉（三局两胜）`;
+            const scoreLine = `黑茶 ${roundWins.kuro} - ${roundWins.shiro} 茉莉`;
+            const message = winner
+                ? `第 ${round} 局结束：${winner.name} 获胜！\n当前比分：${scoreLine}（三局两胜）`
+                : `第 ${round} 局平局：双方同时倒下\n比分不变：${scoreLine}`;
             this.uiManager.showMessage(message, 2500);
             this.uiManager.updateRound(round, roundWins);
         };
@@ -1434,7 +1436,7 @@ class CatClashGame {
 
     moveCat(catId, dx, dy, fromKeyPress = false) {
         const cat = this.cats.find(c => c.id === catId);
-        if (!cat || cat.isDead) return;
+        if (!cat || cat.isDead || cat.isDying) return;
         if (this.rushingCats[catId]?.active) return;
 
         const padding = 60;
@@ -1624,32 +1626,48 @@ class CatClashGame {
                 this.createRushTrail(cat);
             }
 
-            // 检测碰撞
+            const combatLocked = this.cats.some((c) => c.isDying) || (this.battleSystem && !this.battleSystem.isBattleActive);
             const otherCat = this.cats.find(c => c.id !== catId);
-            if (otherCat && !otherCat.isDead) {
+            if (!rush.hasHit && !combatLocked && otherCat && !otherCat.isDead && !otherCat.isDying) {
                 const dx = (cat.x + cat.width / 2) - (otherCat.x + otherCat.width / 2);
                 const dy = (cat.y + cat.height / 2) - (otherCat.y + otherCat.height / 2);
                 const dist = Math.sqrt(dx * dx + dy * dy);
-                
-                if (dist < 100) {
-                    // 碰撞！把对方撞到边界
-                    const pushDirectionX = dx > 0 ? 1 : -1;
-                    const b = this.getPlayBounds();
-                    const targetX = pushDirectionX > 0 
-                        ? b.maxX - otherCat.width 
-                        : b.minX;
-                    
-                    otherCat.targetX = targetX;
-                    otherCat.x = otherCat.targetX;
 
-                    // 造成伤害
+                if (dist < 100) {
+                    rush.hasHit = true;
+                    const originX = otherCat.x;
+                    const originY = otherCat.y;
                     const damage = 6 + Math.floor(Math.random() * 10);
                     const actualDamage = otherCat.takeDamage(damage, cat, { damageKind: 'melee' });
+                    const knock = 180;
+                    let tx = originX;
+                    let ty = originY;
+                    switch (rush.direction) {
+                        case 'left':
+                            tx -= knock;
+                            break;
+                        case 'right':
+                            tx += knock;
+                            break;
+                        case 'up':
+                            ty -= knock;
+                            break;
+                        case 'down':
+                            ty += knock;
+                            break;
+                        default:
+                            break;
+                    }
+                    otherCat.x = originX;
+                    otherCat.y = originY;
+                    otherCat.targetX = tx;
+                    otherCat.targetY = ty;
+                    this.clampCatToWorld(otherCat);
                     if (actualDamage > 0) {
                         audioManager.playHitSound();
+                        this.uiManager.showDamage(otherCat, actualDamage, false, null);
+                        this.uiManager.updateHP(otherCat);
                     }
-                    this.uiManager.showDamage(otherCat, actualDamage, false, null);
-                    this.uiManager.updateHP(otherCat);
                 }
             }
 
@@ -1683,11 +1701,12 @@ class CatClashGame {
         audioManager.playAttackSound();
         attacker._projectileWorldMetrics = this.getProjectileWorldMetrics();
 
-        const damage = this.battleSystem.processAttack(attacker, defender);
+        const projectilesBefore = attacker.projectiles.length;
+        const attackResult = this.battleSystem.processAttack(attacker, defender);
 
-        if (damage > 0) {
+        if (attackResult && attackResult.damage > 0) {
             this.uiManager.updateHP(defender);
-        } else {
+        } else if (!attackResult && attacker.projectiles.length > projectilesBefore) {
             audioManager.playProjectileSound();
         }
     }
@@ -1851,7 +1870,7 @@ class CatClashGame {
         const kuro = this.cats.find(c => c.id === 'kuro');
         const shiro = this.cats.find(c => c.id === 'shiro');
 
-        if (kuro && !kuro.isDead) {
+        if (kuro && !kuro.isDead && !kuro.isDying) {
             if (!this.applyFastMoveHold('kuro', kuro)) {
             const ms = this.NORMAL_MOVE_SPEED;
             if (this.keys['KeyW']) this.moveCat('kuro', 0, -ms);
@@ -1866,7 +1885,7 @@ class CatClashGame {
             }
         }
 
-        if (shiro && !shiro.isDead && this.gameMode !== 'ai') {
+        if (shiro && !shiro.isDead && !shiro.isDying && this.gameMode !== 'ai') {
             if (!this.applyFastMoveHold('shiro', shiro)) {
             const ms = this.NORMAL_MOVE_SPEED;
             if (this.keys['ArrowUp']) this.moveCat('shiro', 0, -ms);
@@ -1922,6 +1941,8 @@ class CatClashGame {
                 cat2.x += overlap / 2;
                 cat2.targetX = cat2.x;
             }
+            this.clampCatToWorld(cat1);
+            this.clampCatToWorld(cat2);
         }
     }
 
@@ -2182,7 +2203,13 @@ class CatClashGame {
     }
 
     checkFoodCollisions() {
+        const battleLocked = this.isBattlePlayType() && (
+            this.cats.some((c) => c.isDying) || (this.battleSystem && !this.battleSystem.isBattleActive)
+        );
+        if (battleLocked) return;
+
         for (const cat of this.cats) {
+            if (cat.isDead || cat.isDying) continue;
             const catCenterX = cat.x + cat.width / 2;
             const catCenterY = cat.y + cat.height / 2;
 
@@ -2378,9 +2405,13 @@ class CatClashGame {
     }
 
     checkProjectileCollisions() {
+        if (this.battleSystem && !this.battleSystem.isBattleActive) return;
+        if (this.cats.some((cat) => cat.isDying)) return;
+
         for (let i = 0; i < this.cats.length; i++) {
             const attacker = this.cats[i];
             const defender = this.cats[(i + 1) % this.cats.length];
+            if (!defender || defender.isDead || defender.isDying) continue;
 
             const hits = attacker.checkProjectileHits(defender, this.worldWidth, this.worldHeight);
             hits.forEach(hit => {
@@ -2391,9 +2422,10 @@ class CatClashGame {
                     return;
                 }
 
+                const actualDamage = defender.takeDamage(hit.damage, attacker, { damageKind: 'projectile' });
+                if (actualDamage <= 0) return;
                 audioManager.playHitSound();
-                defender.takeDamage(hit.damage, attacker);
-                this.uiManager.showDamage(defender, hit.damage, false, null);
+                this.uiManager.showDamage(defender, actualDamage, false, null);
                 this.uiManager.updateHP(defender);
             });
         }
