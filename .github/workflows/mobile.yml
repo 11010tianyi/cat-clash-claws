@@ -1,0 +1,31 @@
+name: Build Mobile Apps
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "index.html"
+      - "css/**"
+      - "js/**"
+      - "images/**"
+      - "package.json"
+      - "bun.lock"
+      - "capacitor.config.ts"
+      - "scripts/**"
+      - "assets/**"
+      - "signing/**"
+      - ".github/workflows/mobile.yml"
+
+# contents: write lets GITHUB_TOKEN create the release tag and upload the APK.
+# The debug signing key travels with the repo as signing/debug.keystore.b64
+# and is pinned by scripts/apply-signing.mjs during `cap sync`, so no
+# repository secret is needed and every build signs with the same key.
+permissions:
+  contents: write
+  actions: write
+
+# Queue builds so two runs cannot claim the same patch tag.
+concurrency:
+  group: android-debug-release
+  cancel-in-progress: false
