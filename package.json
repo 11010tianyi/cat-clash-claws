@@ -1,1 +1,31 @@
-{"author":"11010tianyi","dependencies":{"@capacitor/core":"^8.3.1"},"description":"猫猫对战 — 黑茶 vs 茉莉的本地对战小游戏。","devDependencies":{"@capacitor/android":"^8.3.1","@capacitor/assets":"^4.0.0","@capacitor/cli":"^8.3.1","typescript":"^5.9.3"},"homepage":"https://11010tianyi.github.io/cat-clash-claws/","keywords":["capacitor","cats","game"],"license":"MIT","name":"cat-clash-claws","private":true,"scripts":{"android:apk":"bun run android:sync && cd android && ./gradlew assembleDebug","android:sync":"bun run build:mobile && cap sync android","build:mobile":"node scripts/build-mobile.mjs","capacitor:sync:after":"node scripts/apply-icon.mjs && node scripts/apply-signing.mjs","mobile:sync":"bun run build:mobile && cap sync"},"type":"module","version":"1.0.0"}
+{
+  "author": "11010tianyi",
+  "dependencies": {
+    "@capacitor/core": "^8.3.1"
+  },
+  "description": "猫猫对战 — 黑茶 vs 茉莉的本地对战小游戏。",
+  "devDependencies": {
+    "@capacitor/android": "^8.3.1",
+    "@capacitor/assets": "^4.0.0",
+    "@capacitor/cli": "^8.3.1",
+    "typescript": "^5.9.3"
+  },
+  "homepage": "https://11010tianyi.github.io/cat-clash-claws/",
+  "keywords": [
+    "capacitor",
+    "cats",
+    "game"
+  ],
+  "license": "MIT",
+  "name": "cat-clash-claws",
+  "private": true,
+  "scripts": {
+    "android:apk": "bun run android:sync && cd android && ./gradlew assembleDebug",
+    "android:sync": "bun run build:mobile && cap sync android",
+    "build:mobile": "node scripts/build-mobile.mjs",
+    "capacitor:sync:after": "node scripts/apply-icon.mjs && node scripts/apply-signing.mjs && node scripts/apply-maven-mirror.mjs",
+    "mobile:sync": "bun run build:mobile && cap sync"
+  },
+  "type": "module",
+  "version": "1.0.0"
+}
