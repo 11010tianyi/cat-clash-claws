@@ -39,7 +39,11 @@ class CatClashGame {
                 'ArrowRight': () => this.moveCat('shiro', 1, 0, true),
                 'Numpad1': () => this.attackCat('shiro'),
                 'Numpad3': () => this.skillCat('shiro'),
-                'Numpad0': () => this.fireProjectileCat('shiro')
+                'Numpad0': () => this.fireProjectileCat('shiro'),
+                // 无小键盘的笔记本：主键盘数字键作替代
+                'Digit1': () => this.attackCat('shiro'),
+                'Digit3': () => this.skillCat('shiro'),
+                'Digit0': () => this.fireProjectileCat('shiro')
             }
         };
         this.backgroundElements = {
@@ -53,11 +57,11 @@ class CatClashGame {
         this.foodSpawnIntervalNormal = 5000;
         this.foodSpawnIntervalSpecial = 2500;
         this.foodGroundStayChance = 0.38;
-        this.foodAlphaMin = 0.92;
+        this.foodAlphaMin = 0.15;
         this.foodGroundFadeStart = 0.7;
         this.heartsEffect = null;
         this.blockedProjectileDebris = [];
-        this.defendKeyMap = { kuro: 'KeyK', shiro: 'Numpad2' };
+        this.defendKeyMap = { kuro: ['KeyK'], shiro: ['Numpad2', 'Digit2'] };
         this.touchDefendHeld = { kuro: false, shiro: false };
         
         this.touchControls = {
@@ -561,11 +565,14 @@ class CatClashGame {
                             MinigameRatSystem.spawnHitEffects(this, rat.x, rat.y, 'kill');
                             this.modeScores[attacker.id] = (this.modeScores[attacker.id] || 0) + (rat.points || 1);
                             if (rat.counterDamage) {
-                                const dmg = rat.counterDamage;
-                                attacker.takeDamage(dmg, null);
-                                this.uiManager.showDamage(attacker, dmg, false, null);
+                                // 打耗子没有胜负局：反噬最多扣到剩 1 点生命，不能把猫打死锁在原地
+                                const dmg = Math.max(0, Math.min(rat.counterDamage, attacker.hp - 1));
+                                if (dmg > 0) {
+                                    attacker.takeDamage(dmg, null);
+                                    this.uiManager.showDamage(attacker, dmg, false, null);
+                                    this.uiManager.updateHP(attacker);
+                                }
                                 this.uiManager.showMessage(`${rat.label} 反噬！${attacker.name} -${dmg}`, 1200);
-                                this.uiManager.updateHP(attacker);
                             } else {
                                 this.uiManager.showMessage(`${attacker.name} 消灭 ${rat.label}！+${rat.points || 1}`, 700);
                             }
@@ -785,7 +792,7 @@ class CatClashGame {
         return {
             minX: pad,
             maxX: this.worldWidth - pad,
-            minY: Math.round(this.worldHeight * 0.2),
+            minY: Math.round(this.worldHeight * 0.2) + 30,
             maxY: this.worldHeight - Math.round(this.worldHeight * 0.12)
         };
     }
@@ -936,7 +943,7 @@ class CatClashGame {
 
     handleDefendKeyUp(code) {
         for (const catId of ['kuro', 'shiro']) {
-            if (this.defendKeyMap[catId] === code) {
+            if ((this.defendKeyMap[catId] || []).includes(code)) {
                 const cat = this.cats.find(c => c.id === catId);
                 if (cat) cat.releaseDefend();
             }
@@ -975,7 +982,7 @@ class CatClashGame {
             const cat = this.cats.find(c => c.id === catId);
             if (!cat || cat.isDead) return;
 
-            const keyHeld = this.keys[this.defendKeyMap[catId]] || this.touchDefendHeld[catId];
+            const keyHeld = (this.defendKeyMap[catId] || []).some((code) => this.keys[code]) || this.touchDefendHeld[catId];
             if (keyHeld) {
                 if (!cat.isDefending && !cat.defendHoldExhausted) {
                     this.defendCat(catId, { silent: true });
@@ -1087,6 +1094,22 @@ class CatClashGame {
 
         const gameScreen = document.getElementById('game-screen');
 
+        // 人机模式茉莉由 AI 驱动：隐藏茉莉页签，避免触屏和 AI 抢同一只猫
+        const shiroTab = document.querySelector('.touch-tab.shiro-tab');
+        const kuroTab = document.querySelector('.touch-tab.kuro-tab');
+        if (shiroTab) {
+            if (this.gameMode === 'ai') {
+                shiroTab.style.display = 'none';
+                if (this.currentTouchPlayer !== 'kuro') {
+                    this.currentTouchPlayer = 'kuro';
+                    if (kuroTab) kuroTab.classList.add('active');
+                    shiroTab.classList.remove('active');
+                }
+            } else {
+                shiroTab.style.display = '';
+            }
+        }
+
         if (shouldShow) {
             if (this.gameMode === 'ai') {
                 singlePlayerControls.classList.add('visible');
@@ -1161,6 +1184,7 @@ class CatClashGame {
         });
 
         this.bindTouchTapButton('.touch-btn.attack-btn', () => this.attackCat(this.currentTouchPlayer));
+        this.bindTouchTapButton('.touch-btn.projectile-btn', () => this.fireProjectileCat(this.currentTouchPlayer));
         this.bindTouchTapButton('.touch-btn.skill-btn', () => this.skillCat(this.currentTouchPlayer));
         this.bindTouchDefendHold('.touch-btn.defend-btn', 'kuro', { useActivePlayer: true });
 
@@ -1185,8 +1209,10 @@ class CatClashGame {
         p2Moves.forEach((cfg) => this.bindTouchMoveButton(cfg.selector, 'shiro', cfg));
 
         this.bindTouchTapButton('.touch-btn.attack-btn-p1', () => this.attackCat('kuro'));
+        this.bindTouchTapButton('.touch-btn.projectile-btn-p1', () => this.fireProjectileCat('kuro'));
         this.bindTouchTapButton('.touch-btn.skill-btn-p1', () => this.skillCat('kuro'));
         this.bindTouchTapButton('.touch-btn.attack-btn-p2', () => this.attackCat('shiro'));
+        this.bindTouchTapButton('.touch-btn.projectile-btn-p2', () => this.fireProjectileCat('shiro'));
         this.bindTouchTapButton('.touch-btn.skill-btn-p2', () => this.skillCat('shiro'));
 
         this.bindTouchDefendHold('.touch-btn.defend-btn-p1', 'kuro');
@@ -1369,7 +1395,7 @@ class CatClashGame {
         };
 
         this.battleSystem.onSkill = (user, target, result) => {
-            audioManager.playSkillSound();
+            audioManager.playSkillSound(user.id);
 
             this.uiManager.updateEnergy(user);
 
@@ -1543,12 +1569,13 @@ class CatClashGame {
             return false;
         }
 
-        cat.targetX += state.dx * this.FAST_MOVE_SPEED;
-        cat.targetY += state.dy * this.FAST_MOVE_SPEED;
+        const step = this.frameStep || 1;
+        cat.targetX += state.dx * this.FAST_MOVE_SPEED * step;
+        cat.targetY += state.dy * this.FAST_MOVE_SPEED * step;
         if (state.dx > 0) cat.direction = 'right';
         else if (state.dx < 0) cat.direction = 'left';
 
-        cat.energy = Math.max(0, cat.energy - this.FAST_MOVE_ENERGY_DRAIN);
+        cat.energy = Math.max(0, cat.energy - this.FAST_MOVE_ENERGY_DRAIN * step);
         this.uiManager.updateEnergy(cat);
 
         if (Math.random() > 0.7) {
@@ -1698,7 +1725,7 @@ class CatClashGame {
         if (!attacker || !defender || attacker.isDead || !attacker.canStartAction('attack')) return;
 
         this.faceTarget(attacker, defender);
-        audioManager.playAttackSound();
+        audioManager.playAttackSound(catId);
         attacker._projectileWorldMetrics = this.getProjectileWorldMetrics();
 
         const projectilesBefore = attacker.projectiles.length;
@@ -1768,7 +1795,7 @@ class CatClashGame {
         if (!user || !target || user.isDead || !user.canStartAction('skill')) return;
 
         this.faceTarget(user, target);
-        audioManager.playSkillSound();
+        audioManager.playSkillSound(catId);
 
         const result = this.battleSystem.processSkill(user, target);
         
@@ -1813,6 +1840,8 @@ class CatClashGame {
     }
 
     update(deltaTime) {
+        // 本帧步长（1 = 60fps 的一帧），供按帧计量的移动/耗能统一缩放
+        this.frameStep = Math.max(0.25, Math.min(2.5, (deltaTime || 16.67) / 16.67));
         this.updateBackground(deltaTime);
 
         this.cats.forEach(cat => {
@@ -1872,7 +1901,7 @@ class CatClashGame {
 
         if (kuro && !kuro.isDead && !kuro.isDying) {
             if (!this.applyFastMoveHold('kuro', kuro)) {
-            const ms = this.NORMAL_MOVE_SPEED;
+            const ms = this.NORMAL_MOVE_SPEED * (this.frameStep || 1);
             if (this.keys['KeyW']) this.moveCat('kuro', 0, -ms);
             if (this.keys['KeyS']) this.moveCat('kuro', 0, ms);
             if (this.keys['KeyA']) this.moveCat('kuro', -ms, 0);
@@ -1887,7 +1916,7 @@ class CatClashGame {
 
         if (shiro && !shiro.isDead && !shiro.isDying && this.gameMode !== 'ai') {
             if (!this.applyFastMoveHold('shiro', shiro)) {
-            const ms = this.NORMAL_MOVE_SPEED;
+            const ms = this.NORMAL_MOVE_SPEED * (this.frameStep || 1);
             if (this.keys['ArrowUp']) this.moveCat('shiro', 0, -ms);
             if (this.keys['ArrowDown']) this.moveCat('shiro', 0, ms);
             if (this.keys['ArrowLeft']) this.moveCat('shiro', -ms, 0);
@@ -2239,8 +2268,9 @@ class CatClashGame {
                             }
                         } else if (scoreDelta < 0) {
                             audioManager.playHitSound();
-                            this.uiManager.showDamage(cat, Math.abs(scoreDelta), false, null);
                         }
+                        // 抢食物是计分不是扣血：用分数飘字，不用伤害飘字
+                        this.uiManager.showScoreDelta(cat, scoreDelta);
 
                         this.playFoodPickupAudio(food.type);
                         this.uiManager.showMessage(this.getFoodRushPickupMessage(cat, food, scoreDelta), 1600);

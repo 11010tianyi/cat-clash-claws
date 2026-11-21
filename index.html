@@ -53,11 +53,6 @@
                     </div>
                 </div>
 
-                <button type="button" class="menu-advanced-toggle" id="menu-advanced-toggle" aria-expanded="false">
-                    展开更多选项 ▼
-                </button>
-
-                <div class="menu-advanced-panel" id="menu-advanced-panel">
                 <div class="playtype-section">
                     <h3 class="playtype-title">🎯 玩法类型</h3>
                     <div class="playtype-buttons">
@@ -76,6 +71,11 @@
                     </div>
                 </div>
 
+                <button type="button" class="menu-advanced-toggle" id="menu-advanced-toggle" aria-expanded="false">
+                    展开更多选项 ▼
+                </button>
+
+                <div class="menu-advanced-panel" id="menu-advanced-panel">
                 <div class="style-section">
                     <h3 class="style-title">🎨 角色形象</h3>
                     <div class="style-buttons">
@@ -188,7 +188,7 @@
 
                 <button class="btn-mute" id="btn-mute" onclick="toggleMute()">
                     <span id="mute-icon">🔊</span>
-                    <span id="mute-text">开启音效</span>
+                    <span id="mute-text">音效：开</span>
                 </button>
                 </div>
 
@@ -197,6 +197,8 @@
                     <span class="btn-sparkle">✨</span>
                 </button>
 
+                <button class="btn-fullscreen" id="btn-fullscreen-menu" onclick="toggleFullscreen()">⛶ 全屏游玩</button>
+
 <div class="controls-hint">
                     <div class="hint-section">
                         <h4>🖤 黑茶操作</h4>
@@ -204,7 +206,7 @@
                     </div>
                     <div class="hint-section shiro-hint">
                         <h4>🤍 茉莉操作</h4>
-                        <p>↑ ↓ ← → 移动 | 小键盘1 攻击 | 小键盘0 暗器 | 小键盘2 防御 | 小键盘3 技能</p>
+                        <p>↑ ↓ ← → 移动 | 小键盘1 攻击 | 小键盘0 暗器 | 小键盘2 防御 | 小键盘3 技能（无小键盘可用主键盘 1 / 0 / 2 / 3）</p>
                     </div>
                 </div>
                 
@@ -297,6 +299,7 @@
                 <div class="touch-corner touch-corner-right">
                     <div class="touch-actions">
                         <button type="button" class="touch-btn attack-btn">⚔️ 攻击</button>
+                        <button type="button" class="touch-btn projectile-btn">🎯 暗器</button>
                         <button type="button" class="touch-btn defend-btn">🛡️ 防御</button>
                         <button type="button" class="touch-btn skill-btn">✨ 技能</button>
                     </div>
@@ -318,6 +321,7 @@
                         </div>
                         <div class="touch-actions">
                             <button type="button" class="touch-btn attack-btn-p1">⚔️ 攻击</button>
+                            <button type="button" class="touch-btn projectile-btn-p1">🎯 暗器</button>
                             <button type="button" class="touch-btn defend-btn-p1">🛡️ 防御</button>
                             <button type="button" class="touch-btn skill-btn-p1">✨ 技能</button>
                         </div>
@@ -328,6 +332,7 @@
                     <div class="touch-cluster touch-cluster-mirror">
                         <div class="touch-actions">
                             <button type="button" class="touch-btn attack-btn-p2">⚔️ 攻击</button>
+                            <button type="button" class="touch-btn projectile-btn-p2">🎯 暗器</button>
                             <button type="button" class="touch-btn defend-btn-p2">🛡️ 防御</button>
                             <button type="button" class="touch-btn skill-btn-p2">✨ 技能</button>
                         </div>
@@ -351,6 +356,8 @@
             <div class="battle-message" id="battle-message"></div>
 
             <button type="button" class="battle-help-btn" id="battle-help-btn" title="游戏规则" aria-label="游戏规则帮助">?</button>
+            <button type="button" class="battle-fullscreen-btn" id="battle-fullscreen-btn" onclick="toggleFullscreen()" title="全屏" aria-label="切换全屏">⛶</button>
+            <div class="rotate-hint" id="rotate-hint">📱 横屏 + 全屏体验更好，点右上角 ⛶ 进入全屏</div>
 
             <div class="battle-help-modal" id="battle-help-modal" aria-hidden="true">
                 <div class="battle-help-backdrop" id="battle-help-backdrop"></div>
@@ -376,10 +383,10 @@
                             <h3>🤍 茉莉（玩家2 / 人机）</h3>
                             <ul>
                                 <li><strong>移动</strong>：方向键 ↑ ↓ ← →（触屏：右下角方向键）</li>
-                                <li><strong>攻击</strong>：小键盘 1</li>
-                                <li><strong>暗器</strong>：小键盘 0</li>
-                                <li><strong>防御</strong>：小键盘 2（长按）</li>
-                                <li><strong>技能</strong>：小键盘 3（猫爪拍击）</li>
+                                <li><strong>攻击</strong>：小键盘 1（无小键盘：主键盘 1）</li>
+                                <li><strong>暗器</strong>：小键盘 0（无小键盘：主键盘 0）</li>
+                                <li><strong>防御</strong>：小键盘 2（长按；无小键盘：主键盘 2）</li>
+                                <li><strong>技能</strong>：小键盘 3（猫爪拍击；无小键盘：主键盘 3）</li>
                             </ul>
                         </section>
                         <section>
@@ -471,6 +478,38 @@
     <script src="js/game.js"></script>
 
     <script>
+        function toggleFullscreen() {
+            const doc = document;
+            const isFs = doc.fullscreenElement || doc.webkitFullscreenElement;
+            if (isFs) {
+                (doc.exitFullscreen || doc.webkitExitFullscreen).call(doc);
+                return;
+            }
+            const el = doc.documentElement;
+            const req = el.requestFullscreen || el.webkitRequestFullscreen;
+            if (!req) return;
+            try {
+                const p = req.call(el);
+                if (p && p.catch) p.catch(() => {});
+            } catch (e) { /* 不支持全屏时静默 */ }
+            // 手机上进全屏后尽量锁横屏（不支持就跳过）
+            if (screen.orientation && screen.orientation.lock) {
+                setTimeout(() => {
+                    try {
+                        const r = screen.orientation.lock('landscape');
+                        if (r && r.catch) r.catch(() => {});
+                    } catch (e) {}
+                }, 150);
+            }
+        }
+
+        document.addEventListener('fullscreenchange', () => {
+            if (window.game) window.game.resizeCanvas();
+        });
+        document.addEventListener('webkitfullscreenchange', () => {
+            if (window.game) window.game.resizeCanvas();
+        });
+
         function toggleMute() {
             const isMuted = audioManager.toggleMute();
             const icon = document.getElementById('mute-icon');
@@ -478,10 +517,10 @@
 
             if (isMuted) {
                 icon.textContent = '🔇';
-                text.textContent = '关闭音效';
+                text.textContent = '音效：关';
             } else {
                 icon.textContent = '🔊';
-                text.textContent = '开启音效';
+                text.textContent = '音效：开';
                 audioManager.init();
             }
         }

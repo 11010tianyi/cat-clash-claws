@@ -3,7 +3,8 @@
  */
 const MINIGAME_DURATION_MS = 90000;
 const RAT_ALPHA_BASE = 0.92;
-const RAT_ALPHA_STEALTH_MIN = 0.88;
+const RAT_ALPHA_STEALTH_MIN = 0.30;
+const RAT_ALPHA_STEALTH_MAX = 0.55;
 
 const RAT_VARIANTS = [
     { id: 'normal', label: '灰鼠', emoji: '🐀', hp: 1, speedMin: 1.8, speedMax: 3.2, size: 38, weight: 0.4, points: 1 },
@@ -145,7 +146,7 @@ const MinigameRatSystem = {
         game.rats.forEach((rat) => {
             let alpha = RAT_ALPHA_BASE;
             if (rat.stealth) {
-                alpha = RAT_ALPHA_STEALTH_MIN + (RAT_ALPHA_BASE - RAT_ALPHA_STEALTH_MIN) * (0.5 + 0.5 * Math.sin(t * 3 + rat.wobble));
+                alpha = RAT_ALPHA_STEALTH_MIN + (RAT_ALPHA_STEALTH_MAX - RAT_ALPHA_STEALTH_MIN) * (0.5 + 0.5 * Math.sin(t * 3 + rat.wobble));
             }
             if (rat.hitFlash > 0) alpha = Math.min(1, alpha + rat.hitFlash * 0.35);
 
@@ -162,6 +163,13 @@ const MinigameRatSystem = {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.92)';
             ctx.strokeText(rat.emoji, rat.x, rat.y);
             ctx.fillText(rat.emoji, rat.x, rat.y);
+
+            // 隐身鼠每约 1.6 秒闪一下轮廓，避免完全找不到
+            if (rat.stealth && ((t + rat.wobble) % 1.6) < 0.18) {
+                ctx.globalAlpha = 0.85;
+                ctx.strokeText(rat.emoji, rat.x, rat.y);
+                ctx.globalAlpha = alpha;
+            }
 
             if (rat.hitFlash > 0.15) {
                 ctx.beginPath();

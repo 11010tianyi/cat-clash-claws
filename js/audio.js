@@ -117,14 +117,16 @@ class AudioManager {
         }
     }
 
-    playAttackSound() {
+    playAttackSound(catId) {
         if (!this.isInitialized || this.isMuted) return;
 
+        // 两只猫音高错开，双人对战能听出是谁出手（黑茶低、茉莉高）
+        const pitch = catId === 'shiro' ? 1.25 : catId === 'kuro' ? 0.85 : 1;
         const frequencies = [200, 300, 250];
         frequencies.forEach((freq, i) => {
             setTimeout(() => {
-                this.playNote(freq, 0.1, 'sawtooth', 0.2);
-                this.playNote(freq * 1.5, 0.08, 'square', 0.15);
+                this.playNote(freq * pitch, 0.1, 'sawtooth', 0.2);
+                this.playNote(freq * 1.5 * pitch, 0.08, 'square', 0.15);
             }, i * 30);
         });
     }
@@ -157,12 +159,13 @@ class AudioManager {
         }, 130);
     }
 
-    playSkillSound() {
+    playSkillSound(catId) {
         if (!this.isInitialized || this.isMuted) return;
 
+        const pitch = catId === 'shiro' ? 1.25 : catId === 'kuro' ? 0.85 : 1;
         for (let i = 0; i < 8; i++) {
             setTimeout(() => {
-                const freq = 300 + i * 100;
+                const freq = (300 + i * 100) * pitch;
                 this.playNote(freq, 0.15, 'triangle', 0.25);
                 this.playNote(freq * 1.5, 0.1, 'sine', 0.2);
             }, i * 40);

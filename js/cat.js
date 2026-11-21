@@ -139,11 +139,14 @@ class Cat {
         this.breathPhase += deltaTime * 0.003;
         this.tailPhase += deltaTime * 0.005;
 
-        if (this.attackCooldown > 0) this.attackCooldown--;
-        if (this.skillCooldown > 0) this.skillCooldown--;
+        // 冷却/连击/回能按帧步长缩放，避免高刷屏（120Hz）比 60Hz 快一倍
+        const step = Math.max(0.25, Math.min(2.5, (deltaTime || 16.67) / 16.67));
+
+        if (this.attackCooldown > 0) this.attackCooldown -= step;
+        if (this.skillCooldown > 0) this.skillCooldown -= step;
 
         if (this.comboTimer > 0) {
-            this.comboTimer--;
+            this.comboTimer -= step;
             if (this.comboTimer <= 0) {
                 this.combo = 0;
             }
@@ -194,7 +197,7 @@ class Cat {
         }
 
         if (this.energy < this.maxEnergy) {
-            this.energy = Math.min(this.maxEnergy, this.energy + 0.15);
+            this.energy = Math.min(this.maxEnergy, this.energy + 0.15 * step);
         }
 
         if (this.state === 'skill' || this.skillCooldown > this.skillCooldownMax - 30) {
@@ -1150,12 +1153,18 @@ class Cat {
         ctx.save();
         ctx.translate(0, breathe);
 
+        // 按原图宽高比等比缩放（contain），底部对齐脚印，不再压成正方形
+        const iw = this.image.naturalWidth || w;
+        const ih = this.image.naturalHeight || h;
+        const s = Math.min(w / iw, h / ih);
+        const dw = iw * s;
+        const dh = ih * s;
         ctx.drawImage(
             this.image,
-            -w / 2,
-            -h / 2,
-            w,
-            h
+            -dw / 2,
+            h / 2 - dh,
+            dw,
+            dh
         );
 
         ctx.restore();
@@ -1163,7 +1172,7 @@ class Cat {
 
     drawShadow(ctx) {
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
         ctx.beginPath();
         ctx.ellipse(0, this.height / 2 - 5, 50, 15, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -1656,7 +1665,7 @@ class KuroCat extends Cat {
                 whiskers: '#1a1a1a',
                 innerEar: '#4A3A3A'
             },
-            skillName: '利爪突袭',
+            skillName: '丢便便',
             skillDamage: 1.5,
             skillEffect: 'normal',
             imageSrc: style === 'photo' ? 'images/black-tea.png' : null
@@ -1689,9 +1698,9 @@ class ShiroCat extends Cat {
                 whiskers: '#888',
                 innerEar: '#FFB6C1'
             },
-            skillName: '治愈光波',
+            skillName: '猫爪拍击',
             skillDamage: 1.3,
-            skillEffect: 'defend',
+            skillEffect: 'damage',
             imageSrc: style === 'photo' ? 'images/white-Jasmine.png' : null
         };
         super(config);

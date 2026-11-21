@@ -208,6 +208,24 @@ class UIManager {
         }, 1200);
     }
 
+    showScoreDelta(cat, delta) {
+        if (!this.elements.damageNumbers || !delta) return;
+
+        const el = document.createElement('div');
+        el.className = `damage-popup ${delta > 0 ? 'score-plus' : 'score-minus'}`;
+        el.textContent = delta > 0 ? `+${delta} 分` : `${delta} 分`;
+
+        const pos = this.worldToScreen(cat);
+        el.style.left = `${pos.x}px`;
+        el.style.top = `${pos.y}px`;
+
+        this.elements.damageNumbers.appendChild(el);
+
+        setTimeout(() => {
+            el.remove();
+        }, 1200);
+    }
+
     showDodge(cat) {
         if (!this.elements.damageNumbers) return;
         
