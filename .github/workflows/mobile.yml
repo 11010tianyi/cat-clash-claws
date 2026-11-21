@@ -29,3 +29,69 @@ permissions:
 concurrency:
   group: android-debug-release
   cancel-in-progress: false
+
+jobs:
+  android-debug-apk:
+    name: Android debug APK
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v4
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android packages
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build mobile web assets
+        run: bun run build:mobile
+
+      # The android/ project is generated from capacitor.config.ts instead of
+      # being committed (same generated output as `cap add android` locally).
+      - name: Generate Android project
+        run: bunx cap add android
+
+      # cap sync runs the capacitor:sync:after hook, which regenerates the
+      # launcher icons and pins the debug signing keystore from the repo.
+      - name: Sync Android
+        run: bunx cap sync android
+
+      - name: Build APK
+        working-directory: android
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cat-clash-claws-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash scripts/publish-android-debug-apk.sh android/app/build/outputs/apk/debug/app-debug.apk
